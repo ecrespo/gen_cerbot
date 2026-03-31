@@ -6,7 +6,7 @@
 |---|---|
 | **Autor** | Ernesto Crespo |
 | **Estado** | `DRAFT` |
-| **Versión** | 1.3 |
+| **Versión** | 1.5 |
 | **Fecha** | 2026-03-31 |
 | **SPEC Relacionado** | [SPEC.md](./SPEC.md) |
 | **Reviewers** | Por definir |
@@ -588,18 +588,266 @@ La herramienta usa el módulo `logging` estándar de Python. Los logs se escribe
 
 ## 8. Estrategia de Testing
 
-| Nivel | Cobertura Target | Herramientas | Qué cubre |
+### 8.1 Pirámide de Tests
+
+```
+         ▲
+        /E2E\          Manual / VM  — happy paths en Ubuntu, Fedora, openSUSE
+       /──────\         (Fase 6, Let's Encrypt --staging)
+      /  Integ \        pytest + tmp_path — flujos críticos sin red ni sudo real
+     /──────────\
+    /    Unit    \      pytest + unittest.mock — lógica de negocio aislada
+   ──────────────────
+```
+
+| Nivel | Target cobertura | Entorno | Herramientas principales |
 |---|---|---|---|
-| Unit | > 80% | pytest, unittest.mock | Providers, CertbotManager, DNSValidator, TemplateRenderer, CertRegistry |
-| Integration | Flujos críticos | pytest, tmp_path fixtures | Generación de archivos de config, parseo de output de Certbot |
-| E2E / Manual | Happy paths | Entorno VM Ubuntu 22.04 | Flujo completo con servidor real y Let's Encrypt staging |
+| **Unit** | > 85% por módulo | CI / local | `pytest`, `unittest.mock`, `pytest-mock` |
+| **Integración** | Flujos críticos (10 escenarios mínimo) | CI / local | `pytest`, `tmp_path`, fixtures estáticas |
+| **E2E / Manual** | Happy paths en 3 distros | VM limpia | Entorno real + `--staging` de Let's Encrypt |
 
-**Estrategia de mocking:**
+### 8.2 Estructura de Directorios de Tests
 
-- `SystemRunner` se mockea en todos los tests unitarios → no se ejecutan comandos reales
-- El sistema de archivos se mockea con `tmp_path` de pytest o `unittest.mock.patch("builtins.open")`
-- Las llamadas DNS se mockean con `unittest.mock.patch("socket.getaddrinfo")`
-- Certbot se mockea con respuestas predefinidas en `tests/fixtures/certbot_outputs/`
+```
+tests/
+├── conftest.py                     # Fixtures globales: runner_mock, pkg_manager_mock, tmp_config
+├── unit/
+│   ├── test_system_runner.py       # SystemRunner: sudo, sin sudo, error de subprocess
+│   ├── test_distro_detector.py     # DistroDetector: 3 distros + desconocida
+│   ├── test_package_manager.py     # Apt/Dnf/Zypper: install, is_installed, update
+│   ├── test_dns_validator.py       # DNSValidator: ok, fallo, skip_dns_check
+│   ├── test_cert_registry.py       # CertRegistry: add, list, remove, idempotencia
+│   ├── test_template_renderer.py   # TemplateRenderer: nginx, apache por distro, traefik
+│   ├── test_nginx_provider.py      # NginxProvider: install, configure, verify, remove
+│   ├── test_apache_provider.py     # ApacheProvider: 3 DistroFamily
+│   ├── test_traefik_provider.py    # TraefikProvider: generación de compose + acme.json
+│   ├── test_certbot_installer.py   # CertbotInstaller: snap, dnf, zypper
+│   ├── test_certbot_manager.py     # CertbotManager: certonly, renew, revoke, list
+│   ├── test_certbot_service.py     # CertbotService: flujo generate, list, renew, remove
+│   ├── test_cli.py                 # CLI Typer: CliRunner por subcomando
+│   ├── interactive/
+│   │   ├── test_wizard.py          # GenerateWizard: campos, validación, resumen
+│   │   ├── test_menu.py            # InteractiveMenu: routing de opciones
+│   │   └── test_output.py          # LiveOutputRenderer: indicadores [✔]/[→]/[✗]
+│   └── i18n/
+│       ├── test_locale_manager.py  # LocaleManager: t(), fallback, interpolación
+│       └── test_language_selector.py # LanguageSelector: prompt, persistencia, --lang
+├── integration/
+│   ├── test_nginx_config_gen.py    # Genera archivo nginx en tmp_path y valida contenido
+│   ├── test_apache_config_gen.py   # Genera VirtualHost Apache por distro en tmp_path
+│   ├── test_traefik_config_gen.py  # Genera docker-compose.yml + traefik.yml en tmp_path
+│   ├── test_certbot_output.py      # Parseo de salida real de `certbot certificates`
+│   ├── test_cert_registry_io.py    # Lectura/escritura del JSON registry en disco real
+│   └── test_full_flow.py           # CertbotService end-to-end con todos los deps mockeados
+└── fixtures/
+    ├── os-release/
+    │   ├── ubuntu-22.04            # Contenido de /etc/os-release en Ubuntu 22.04
+    │   ├── debian-12               # Contenido de /etc/os-release en Debian 12
+    │   ├── fedora-40               # Contenido de /etc/os-release en Fedora 40
+    │   ├── opensuse-leap-15.5      # Contenido de /etc/os-release en openSUSE Leap
+    │   └── unknown-distro          # Distro sin ID conocido (para UnsupportedDistroError)
+    ├── certbot-outputs/
+    │   ├── certificates_ok.txt     # Salida de `certbot certificates` con 2 certs
+    │   ├── certificates_empty.txt  # Salida con "No certificates found"
+    │   └── certonly_success.txt    # Salida de `certbot certonly --nginx` exitoso
+    └── templates-rendered/
+        ├── nginx-site-expected.conf        # Config Nginx esperada para comparar
+        ├── apache-debian-expected.conf     # VirtualHost Apache Debian esperado
+        ├── apache-redhat-expected.conf     # VirtualHost Apache Fedora esperado
+        └── traefik-compose-expected.yml    # docker-compose.yml Traefik esperado
+```
+
+### 8.3 Fixtures Globales (`conftest.py`)
+
+```python
+@pytest.fixture
+def mock_runner(mocker):
+    """SystemRunner con subprocess.run mockeado — no ejecuta comandos reales."""
+    runner = MagicMock(spec=SystemRunner)
+    runner.run.return_value = CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    return runner
+
+@pytest.fixture
+def mock_apt(mock_runner):
+    """AptPackageManager inyectado con runner mockeado."""
+    return AptPackageManager(runner=mock_runner)
+
+@pytest.fixture
+def mock_dnf(mock_runner):
+    """DnfPackageManager inyectado con runner mockeado."""
+    return DnfPackageManager(runner=mock_runner)
+
+@pytest.fixture
+def tmp_config(tmp_path):
+    """Directorio de configuración temporal para CertRegistry y LocaleManager."""
+    config_dir = tmp_path / ".config" / "gen_cerbot"
+    config_dir.mkdir(parents=True)
+    return config_dir
+
+@pytest.fixture
+def ubuntu_os_release(tmp_path):
+    """Archivo /etc/os-release para Ubuntu 22.04 en directorio temporal."""
+    content = Path("tests/fixtures/os-release/ubuntu-22.04").read_text()
+    f = tmp_path / "os-release"
+    f.write_text(content)
+    return f
+```
+
+### 8.4 Estrategia de Mocking por Módulo
+
+| Módulo | Dependencia que se mockea | Método de mock | Qué se verifica |
+|---|---|---|---|
+| `SystemRunner` | `subprocess.run` | `unittest.mock.patch` | cmd construida, sudo prepended, returncode != 0 → `SystemCommandError` |
+| `DistroDetector` | `/etc/os-release` | `tmp_path` + fixture file | DistroFamily correcto para Ubuntu/Fedora/openSUSE/unknown |
+| `AptPackageManager` | `SystemRunner` | `MagicMock(spec=SystemRunner)` | cmd incluye `apt-get install -y` + lista de paquetes |
+| `DnfPackageManager` | `SystemRunner` | `MagicMock(spec=SystemRunner)` | cmd incluye `dnf install -y` + lista de paquetes |
+| `ZypperPackageManager` | `SystemRunner` | `MagicMock(spec=SystemRunner)` | cmd incluye `zypper install -y` + lista de paquetes |
+| `NginxProvider` | `PackageManager`, `SystemRunner` | `MagicMock` | `install()` llama `pkg_manager.install(["nginx", ...])`; `verify()` usa `sudo=True` |
+| `ApacheProvider` | `PackageManager`, `SystemRunner`, `DistroFamily` | `MagicMock` | nombre de paquete varía por `DistroFamily` (apache2 / httpd); template correcto |
+| `TraefikProvider` | `SystemRunner`, `tmp_path` | `MagicMock` + `tmp_path` | archivos generados existen; `acme.json` con permisos 600 |
+| `DNSValidator` | `socket.getaddrinfo` | `unittest.mock.patch("socket.getaddrinfo")` | IP coincide → OK; no coincide → `DNSValidationError` con mensaje |
+| `CertbotManager` | `SystemRunner` | `MagicMock` | cmd de `certonly` incluye `--nginx`/`--apache`; `certificates` parsea fixture |
+| `CertbotInstaller` | `SystemRunner`, `DistroFamily` | `MagicMock` | instala via snap para Debian, dnf para Fedora, zypper para SUSE |
+| `CertbotService` | todos los anteriores | múltiples `MagicMock` + `patch` | secuencia de llamadas correcta; propagación de excepciones |
+| `GenerateWizard` | `questionary` | `mocker.patch("questionary.text.ask")` + `unsafe_ask` | campos con valores predefinidos; validación rechaza emails inválidos |
+| `LiveOutputRenderer` | `rich.Console` | `rich.Console(file=io.StringIO())` | output contiene `[✔]` al completar; `[✗]` al fallar |
+| `LocaleManager` | archivos `locales/*.json` | `tmp_path` con JSON custom | `t("clave")` retorna texto correcto; clave inexistente → fallback inglés |
+| `LanguageSelector` | `questionary`, `config.toml` | `mocker.patch` + `tmp_config` fixture | persiste lang en TOML; segunda llamada no muestra prompt |
+| CLI (Typer) | `CertbotService` | `Typer CliRunner` + `MagicMock` | exit code 0 en happy path; exit code != 0 con flag faltante + `--no-interactive` |
+
+### 8.5 Patrones de Tests de Integración
+
+Los tests de integración verifican la colaboración entre dos o más módulos reales, sin red ni sudo. Usan `tmp_path` para I/O de disco.
+
+**Patrón: generación de archivo de configuración**
+
+```python
+def test_nginx_config_gen_creates_valid_file(tmp_path, mock_runner):
+    config = CertificateConfig(
+        domain="app.example.com", server_type=ServerType.NGINX,
+        backend_port=8000, project_name="myapp", email="a@b.com"
+    )
+    provider = NginxProvider(runner=mock_runner, config_dir=tmp_path)
+    provider.configure(config)
+
+    site_file = tmp_path / "sites-available" / "myapp"
+    assert site_file.exists()
+    content = site_file.read_text()
+    assert "app.example.com" in content
+    assert "proxy_pass http://localhost:8000" in content
+```
+
+**Patrón: parseo de salida de Certbot**
+
+```python
+def test_certbot_manager_parses_certificates_output(mock_runner):
+    fixture = Path("tests/fixtures/certbot-outputs/certificates_ok.txt").read_text()
+    mock_runner.run.return_value = CompletedProcess(args=[], returncode=0, stdout=fixture)
+    manager = CertbotManager(runner=mock_runner)
+
+    certs = manager.list_certificates()
+    assert len(certs) == 2
+    assert certs[0].domain == "api.example.com"
+    assert certs[0].days_until_expiry > 0
+```
+
+**Patrón: flujo completo de `generate` con todos los deps mockeados**
+
+```python
+def test_certbot_service_generate_full_flow(mock_runner, tmp_path, mocker):
+    mocker.patch("socket.getaddrinfo", return_value=[("", "", "", "", ("203.0.113.1", 0))])
+    mocker.patch("gen_cerbot.utils.system.get_local_ips", return_value=["203.0.113.1"])
+    config = CertificateConfig(domain="app.example.com", ...)
+
+    service = CertbotService(runner=mock_runner, config_dir=tmp_path)
+    service.generate(config)
+
+    # Verificar secuencia de llamadas
+    calls = [str(c) for c in mock_runner.run.call_args_list]
+    assert any("nginx -t" in c for c in calls)
+    assert any("certbot" in c for c in calls)
+```
+
+### 8.6 Cobertura Mínima por Módulo
+
+| Módulo | Cobertura mínima | Justificación |
+|---|---|---|
+| `utils/system.py` | 95% | Núcleo de seguridad — sudo granular |
+| `utils/distro.py` | 100% | Lógica de detección crítica, pequeño |
+| `utils/package_manager.py` | 90% | Las 3 implementaciones deben cubrir install, update, is_installed |
+| `utils/dns.py` | 90% | Flujo ok + error + skip deben estar cubiertos |
+| `providers/nginx.py` | 85% | install, configure, verify, remove |
+| `providers/apache.py` | 85% | Los 3 `DistroFamily` en configure |
+| `providers/traefik.py` | 80% | Generación de archivos + chmod |
+| `certbot/manager.py` | 85% | certonly, renew, revoke, list, parsing |
+| `certbot/installer.py` | 90% | snap, dnf, zypper branches |
+| `domain/services.py` | 80% | Flujo principal + manejo de excepciones |
+| `interactive/wizard.py` | 80% | Happy path + validación de campos |
+| `interactive/output.py` | 75% | Estados [✔] [→] [✗] |
+| `i18n/locale_manager.py` | 95% | Fallback, interpolación — crítico para UX |
+| `i18n/selector.py` | 85% | prompt, persistencia, --lang override |
+| `cli.py` | 75% | Subcomandos principales via CliRunner |
+
+### 8.7 Configuración de pytest y Cobertura
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers -v"
+markers = [
+    "unit: tests unitarios sin I/O real",
+    "integration: tests con I/O de disco (tmp_path)",
+    "e2e: tests que requieren entorno Linux real con sudo",
+]
+
+[tool.coverage.run]
+source = ["src/gen_cerbot"]
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+```
+
+**Comandos de uso:**
+
+```bash
+# Ejecutar solo tests unitarios (sin I/O real)
+pytest -m unit
+
+# Ejecutar tests unitarios + integración
+pytest -m "unit or integration"
+
+# Ver cobertura por módulo
+pytest --cov=src/gen_cerbot --cov-report=term-missing -m "unit or integration"
+
+# Generar reporte HTML de cobertura
+pytest --cov=src/gen_cerbot --cov-report=html
+
+# Tests E2E (requieren entorno Linux con sudo)
+pytest -m e2e --sudo
+```
+
+### 8.8 Dependencias de Testing
+
+```toml
+# pyproject.toml — grupo [project.optional-dependencies]
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",      # mocker fixture (alternativa a unittest.mock.patch)
+    "pytest-cov>=5.0",        # cobertura integrada
+    "pytest-asyncio>=0.23",   # por si se usan corutinas en el futuro
+    "rich",                   # ya es dependencia de producción
+    "typer[all]",             # ya es dependencia de producción
+]
+```
 
 ---
 
@@ -646,3 +894,5 @@ select = ["E", "F", "I", "UP"]
 | 1.1 | 2026-03-31 | Ernesto Crespo | Multi-distro: DistroDetector, PackageManager ABC (Apt/Dnf/Zypper), PkgFamily enum, SystemRunner con sudo granular, tabla de mapeo de paquetes por distro, DD-005 PackageManager Strategy, DD-006 sudo granular |
 | 1.2 | 2026-03-31 | Ernesto Crespo | Modo interactivo: módulo interactive/ (menu.py, wizard.py, output.py), componentes InteractiveMenu/GenerateWizard/LiveOutputRenderer, diagrama dual-mode actualizado, DD-007 questionary, DD-008 rich.live, CertificateConfig con campo interactive |
 | 1.3 | 2026-03-31 | Ernesto Crespo | Soporte i18n: módulo i18n/ (locale_manager.py, selector.py, locales/en.json, es.json), LanguageSelector, LocaleManager, DD-009 JSON locales, flag --lang global, campo lang en CertificateConfig, ejemplo de estructura locale JSON, diagrama de entrada actualizado con capa i18n |
+| 1.4 | 2026-03-31 | Ernesto Crespo | Empaquetado nativo: pyproject.toml completo, packaging/debian/, packaging/rpm/gen-cerbot.spec; Sección 9 actualizada con .deb y .rpm |
+| 1.5 | 2026-03-31 | Ernesto Crespo | Especificaciones de testing: Sección 8 reescrita con pirámide de tests, estructura tests/, catálogo de fixtures (os-release, certbot-outputs, templates-rendered), conftest.py con fixtures globales, tabla de mock por módulo, patrones de integración, cobertura mínima por módulo, pyproject.toml con pytest/coverage config y dependencias de dev |

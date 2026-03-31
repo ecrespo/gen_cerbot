@@ -6,7 +6,7 @@
 |---|---|
 | **Autor** | Ernesto Crespo |
 | **Estado** | `DRAFT` |
-| **Versión** | 1.4 |
+| **Versión** | 1.5 |
 | **Fecha** | 2026-03-31 |
 | **SPEC** | [SPEC.md](./SPEC.md) |
 | **Architecture** | [ARCHITECTURE.md](./ARCHITECTURE.md) |
@@ -440,6 +440,122 @@ Fase 1: Foundation & Setup
 
 ---
 
+## 7. Catálogo de Casos de Prueba
+
+Catálogo de referencia de todos los tests requeridos. Sirve como contrato entre el diseño (ARCHITECTURE.md §8) y la implementación. Cada caso de prueba corresponde a un test function en el archivo indicado.
+
+### 7.1 Tests Unitarios — `utils/`
+
+| ID | Archivo | Test | Entrada / Escenario | Resultado esperado | Mock |
+|---|---|---|---|---|---|
+| TC-001 | `test_system_runner.py` | `test_run_prepends_sudo` | `run(["nginx", "-t"], sudo=True)` | `subprocess.run` llamado con `["sudo", "nginx", "-t"]` | `subprocess.run` |
+| TC-002 | `test_system_runner.py` | `test_run_without_sudo` | `run(["ls"], sudo=False)` | `subprocess.run` llamado con `["ls"]` (sin sudo) | `subprocess.run` |
+| TC-003 | `test_system_runner.py` | `test_run_nonzero_raises` | `subprocess.run` retorna `returncode=1` | Lanza `SystemCommandError` con exit code y cmd | `subprocess.run` |
+| TC-004 | `test_system_runner.py` | `test_run_captures_stdout` | `subprocess.run` retorna `stdout="output"` | `result.stdout == "output"` | `subprocess.run` |
+| TC-005 | `test_distro_detector.py` | `test_detect_ubuntu_2204` | fixture `ubuntu-22.04` en `tmp_path` | `DistroFamily.DEBIAN` | `/etc/os-release` via `tmp_path` |
+| TC-006 | `test_distro_detector.py` | `test_detect_debian_12` | fixture `debian-12` en `tmp_path` | `DistroFamily.DEBIAN` | `/etc/os-release` via `tmp_path` |
+| TC-007 | `test_distro_detector.py` | `test_detect_fedora_40` | fixture `fedora-40` en `tmp_path` | `DistroFamily.REDHAT` | `/etc/os-release` via `tmp_path` |
+| TC-008 | `test_distro_detector.py` | `test_detect_opensuse_leap` | fixture `opensuse-leap-15.5` en `tmp_path` | `DistroFamily.SUSE` | `/etc/os-release` via `tmp_path` |
+| TC-009 | `test_distro_detector.py` | `test_detect_unknown_raises` | fixture `unknown-distro` en `tmp_path` | Lanza `UnsupportedDistroError` | `/etc/os-release` via `tmp_path` |
+| TC-010 | `test_package_manager.py` | `test_apt_install_cmd` | `apt.install(["nginx", "certbot"])` | cmd contiene `apt-get install -y nginx certbot` con sudo | `SystemRunner` mock |
+| TC-011 | `test_package_manager.py` | `test_dnf_install_cmd` | `dnf.install(["httpd"])` | cmd contiene `dnf install -y httpd` con sudo | `SystemRunner` mock |
+| TC-012 | `test_package_manager.py` | `test_zypper_install_cmd` | `zypper.install(["nginx"])` | cmd contiene `zypper install -y nginx` con sudo | `SystemRunner` mock |
+| TC-013 | `test_package_manager.py` | `test_is_installed_no_sudo` | `apt.is_installed("nginx")` | cmd no contiene sudo | `SystemRunner` mock |
+| TC-014 | `test_dns_validator.py` | `test_dns_ok` | `socket.getaddrinfo` retorna IP del servidor | No lanza excepción | `socket.getaddrinfo` |
+| TC-015 | `test_dns_validator.py` | `test_dns_mismatch_raises` | `getaddrinfo` retorna IP distinta a la local | Lanza `DNSValidationError` con IPs en mensaje | `socket.getaddrinfo` |
+| TC-016 | `test_dns_validator.py` | `test_skip_dns_check_bypasses` | `CertificateConfig(skip_dns_check=True)` | No llama `socket.getaddrinfo` | `socket.getaddrinfo` (no llamado) |
+| TC-017 | `test_cert_registry.py` | `test_add_creates_entry` | `registry.add(record)` en `tmp_config` | JSON en disco contiene el registro | `tmp_path` |
+| TC-018 | `test_cert_registry.py` | `test_list_empty` | `registry.list()` sin registros previos | Retorna lista vacía | `tmp_path` |
+| TC-019 | `test_cert_registry.py` | `test_remove_existing` | `registry.remove("app.example.com")` | Registro eliminado del JSON | `tmp_path` |
+| TC-020 | `test_cert_registry.py` | `test_add_idempotent` | `registry.add(record)` dos veces | Solo un registro en JSON | `tmp_path` |
+| TC-021 | `test_template_renderer.py` | `test_render_nginx_contains_domain` | `render("nginx/site.conf.j2", config)` | Output contiene `server_name app.example.com` | `tmp_path` |
+| TC-022 | `test_template_renderer.py` | `test_render_apache_debian_uses_apache2` | `render("apache/vhost-debian.conf.j2", ...)` | Output contiene `DocumentRoot` y `ProxyPass` | `tmp_path` |
+| TC-023 | `test_template_renderer.py` | `test_render_traefik_compose_has_service` | `render("traefik/docker-compose.yml.j2", ...)` | Output YAML válido con servicios `traefik` y `app` | `tmp_path` |
+
+### 7.2 Tests Unitarios — `providers/`
+
+| ID | Archivo | Test | Escenario | Resultado esperado | Mock |
+|---|---|---|---|---|---|
+| TC-024 | `test_nginx_provider.py` | `test_install_calls_pkg_manager` | `nginx.install()` | `pkg_manager.install(["nginx", ...])` llamado | `PackageManager`, `SystemRunner` |
+| TC-025 | `test_nginx_provider.py` | `test_configure_calls_template_renderer` | `nginx.configure(config)` | `template_renderer.render(...)` llamado con `config` | `TemplateRenderer` mock |
+| TC-026 | `test_nginx_provider.py` | `test_verify_uses_sudo` | `nginx.verify()` | `runner.run(["nginx", "-t"], sudo=True)` | `SystemRunner` |
+| TC-027 | `test_nginx_provider.py` | `test_remove_unlinks_site` | `nginx.remove("myapp")` | `runner.run(["unlink", ...], sudo=True)` y `reload` | `SystemRunner` |
+| TC-028 | `test_apache_provider.py` | `test_install_debian_uses_apache2` | `DistroFamily.DEBIAN` | `pkg_manager.install(["apache2", ...])` | `PackageManager`, `SystemRunner` |
+| TC-029 | `test_apache_provider.py` | `test_install_redhat_uses_httpd` | `DistroFamily.REDHAT` | `pkg_manager.install(["httpd", ...])` | `PackageManager`, `SystemRunner` |
+| TC-030 | `test_apache_provider.py` | `test_install_suse_uses_apache2` | `DistroFamily.SUSE` | `pkg_manager.install(["apache2", ...])` | `PackageManager`, `SystemRunner` |
+| TC-031 | `test_apache_provider.py` | `test_configure_uses_distro_template` | `configure(config, DistroFamily.REDHAT)` | Template `vhost-redhat.conf.j2` seleccionado | `TemplateRenderer` mock |
+| TC-032 | `test_traefik_provider.py` | `test_configure_creates_files` | `traefik.configure(config)` | docker-compose.yml y traefik.yml creados en `tmp_path` | `SystemRunner`, `tmp_path` |
+| TC-033 | `test_traefik_provider.py` | `test_acme_json_permissions` | `traefik.configure(config)` | `runner.run(["chmod", "600", "acme.json"], sudo=True)` | `SystemRunner` |
+
+### 7.3 Tests Unitarios — `certbot/`
+
+| ID | Archivo | Test | Escenario | Resultado esperado | Mock |
+|---|---|---|---|---|---|
+| TC-034 | `test_certbot_installer.py` | `test_install_debian_uses_snap` | `DistroFamily.DEBIAN` | cmd contiene `snap install certbot` con sudo | `SystemRunner` |
+| TC-035 | `test_certbot_installer.py` | `test_install_fedora_uses_dnf` | `DistroFamily.REDHAT` | cmd contiene `dnf install certbot` con sudo | `SystemRunner` |
+| TC-036 | `test_certbot_installer.py` | `test_install_suse_uses_zypper` | `DistroFamily.SUSE` | cmd contiene `zypper install certbot` con sudo | `SystemRunner` |
+| TC-037 | `test_certbot_installer.py` | `test_skip_if_already_installed` | `is_installed("certbot") == True` | No ejecuta comandos de instalación | `SystemRunner` |
+| TC-038 | `test_certbot_manager.py` | `test_certonly_nginx_cmd` | `certonly(config, server="nginx")` | cmd contiene `--nginx -d app.example.com` con sudo | `SystemRunner` |
+| TC-039 | `test_certbot_manager.py` | `test_certonly_staging_flag` | `config.staging=True` | cmd contiene `--staging` | `SystemRunner` |
+| TC-040 | `test_certbot_manager.py` | `test_renew_cmd` | `manager.renew()` | cmd contiene `certbot renew` con sudo | `SystemRunner` |
+| TC-041 | `test_certbot_manager.py` | `test_revoke_cmd` | `manager.revoke("app.example.com")` | cmd contiene `certbot revoke --cert-name` con sudo | `SystemRunner` |
+| TC-042 | `test_certbot_manager.py` | `test_list_parses_fixture_ok` | stdout = fixture `certificates_ok.txt` | retorna lista con 2 `CertificateRecord` | `SystemRunner` con fixture |
+| TC-043 | `test_certbot_manager.py` | `test_list_returns_empty_when_no_certs` | stdout = fixture `certificates_empty.txt` | retorna lista vacía | `SystemRunner` con fixture |
+
+### 7.4 Tests Unitarios — `domain/`
+
+| ID | Archivo | Test | Escenario | Resultado esperado | Mock |
+|---|---|---|---|---|---|
+| TC-044 | `test_certbot_service.py` | `test_generate_calls_dns_check` | `service.generate(config)` | `dns_validator.check(config.domain)` llamado | todos los deps |
+| TC-045 | `test_certbot_service.py` | `test_generate_skip_dns_when_flag` | `config.skip_dns_check=True` | `dns_validator.check` no llamado | todos los deps |
+| TC-046 | `test_certbot_service.py` | `test_generate_sequence` | `service.generate(config)` happy path | secuencia: DNS → install → configure → verify → certbot | todos los deps |
+| TC-047 | `test_certbot_service.py` | `test_generate_aborts_on_dns_error` | `dns_validator.check` lanza `DNSValidationError` | `generate` propaga excepción, no sigue | todos los deps |
+| TC-048 | `test_certbot_service.py` | `test_generate_aborts_on_root` | `os.geteuid() == 0` | lanza `SudoError` antes de hacer cualquier cosa | `os.geteuid` mock |
+| TC-049 | `test_certbot_service.py` | `test_list_delegates_to_certbot_manager` | `service.list()` | retorna lo que retorna `certbot_manager.list_certificates()` | `CertbotManager` mock |
+| TC-050 | `test_certbot_service.py` | `test_renew_delegates_to_certbot_manager` | `service.renew()` | `certbot_manager.renew()` llamado | `CertbotManager` mock |
+| TC-051 | `test_certbot_service.py` | `test_remove_sequence` | `service.remove("app.example.com")` | revoke → remove config → registry.remove | todos los deps |
+
+### 7.5 Tests Unitarios — CLI, interactive/ e i18n/
+
+| ID | Archivo | Test | Escenario | Resultado esperado | Mock |
+|---|---|---|---|---|---|
+| TC-052 | `test_cli.py` | `test_generate_exits_0_with_all_flags` | `generate --server nginx --domain X --port 8080 --project Y --email Z` | exit code 0 | `CertbotService` mock via `CliRunner` |
+| TC-053 | `test_cli.py` | `test_generate_exits_nonzero_missing_domain` | `generate --server nginx --no-interactive` (sin `--domain`) | exit code != 0, mensaje de error | `CliRunner` |
+| TC-054 | `test_cli.py` | `test_list_calls_service_list` | `gen-cerbot list` | `service.list()` llamado; exit code 0 | `CertbotService` mock |
+| TC-055 | `test_cli.py` | `test_version_flag` | `gen-cerbot --version` | output contiene versión del paquete | ninguno |
+| TC-056 | `test_cli.py` | `test_lang_flag_sets_locale` | `gen-cerbot --lang es generate ...` | `LocaleManager.set_lang("es")` llamado antes de Typer | `LocaleManager` mock |
+| TC-057 | `interactive/test_wizard.py` | `test_wizard_happy_path` | respuestas predefinidas para 6 campos | retorna `CertificateConfig` con valores correctos | `questionary.unsafe_ask` |
+| TC-058 | `interactive/test_wizard.py` | `test_wizard_rejects_invalid_email` | email `"not-an-email"` | re-pregunta (no avanza) | `questionary` mock |
+| TC-059 | `interactive/test_wizard.py` | `test_wizard_rejects_invalid_port` | port `"99999"` | re-pregunta (no avanza) | `questionary` mock |
+| TC-060 | `interactive/test_menu.py` | `test_menu_generate_routes_to_wizard` | selección "Generate certificate" | llama `wizard.run()` | `questionary.select`, `GenerateWizard` mock |
+| TC-061 | `interactive/test_menu.py` | `test_menu_exit_calls_sys_exit` | selección "Exit" | `sys.exit(0)` llamado | `questionary.select`, `sys.exit` mock |
+| TC-062 | `interactive/test_output.py` | `test_renderer_shows_check_on_success` | `renderer.step("Installing", success=True)` | output capturado contiene `[✔]` | `rich.Console(file=StringIO())` |
+| TC-063 | `interactive/test_output.py` | `test_renderer_shows_cross_on_failure` | `renderer.step("Installing", success=False)` | output capturado contiene `[✗]` | `rich.Console(file=StringIO())` |
+| TC-064 | `i18n/test_locale_manager.py` | `test_t_returns_correct_en_string` | `manager.set_lang("en"); manager.t("menu.exit")` | `"Exit"` | JSON en `tmp_path` |
+| TC-065 | `i18n/test_locale_manager.py` | `test_t_returns_correct_es_string` | `manager.set_lang("es"); manager.t("menu.exit")` | `"Salir"` | JSON en `tmp_path` |
+| TC-066 | `i18n/test_locale_manager.py` | `test_t_falls_back_to_en_for_missing_key` | clave existe en `en.json` pero no en `es.json` | retorna valor en inglés, sin excepción | JSON parcial en `tmp_path` |
+| TC-067 | `i18n/test_locale_manager.py` | `test_t_interpolates_variables` | `manager.t("output.done", domain="app.example.com")` | string con dominio interpolado | JSON en `tmp_path` |
+| TC-068 | `i18n/test_language_selector.py` | `test_resolve_reads_saved_preference` | `config.toml` contiene `lang = "es"` | `LocaleManager.set_lang("es")` llamado; no muestra prompt | `config.toml` en `tmp_path`, `questionary` mock |
+| TC-069 | `i18n/test_language_selector.py` | `test_resolve_shows_prompt_on_first_run` | `config.toml` no existe | prompt `questionary.select` mostrado; respuesta persistida | `questionary.select` mock |
+| TC-070 | `i18n/test_language_selector.py` | `test_resolve_lang_flag_skips_prompt` | `--lang es` pasado | `set_lang("es")` sin prompt ni lectura de `config.toml` | `questionary` no llamado |
+
+### 7.6 Tests de Integración
+
+| ID | Archivo | Test | Qué se prueba | Deps reales | Deps mockeados |
+|---|---|---|---|---|---|
+| TI-001 | `test_nginx_config_gen.py` | `test_nginx_configure_creates_valid_file` | Archivo de config Nginx generado en `tmp_path` contiene dominio, puerto y cabeceras correctas | `NginxProvider`, `TemplateRenderer`, `CertificateConfig` | `SystemRunner` |
+| TI-002 | `test_apache_config_gen.py` | `test_apache_debian_template_selected` | `ApacheProvider` con `DistroFamily.DEBIAN` genera el VirtualHost con `apache2` syntax | `ApacheProvider`, `TemplateRenderer` | `SystemRunner`, `PackageManager` |
+| TI-003 | `test_apache_config_gen.py` | `test_apache_redhat_template_selected` | `ApacheProvider` con `DistroFamily.REDHAT` genera el VirtualHost con `httpd` syntax | `ApacheProvider`, `TemplateRenderer` | `SystemRunner`, `PackageManager` |
+| TI-004 | `test_apache_config_gen.py` | `test_apache_suse_template_selected` | `ApacheProvider` con `DistroFamily.SUSE` genera el VirtualHost correcto | `ApacheProvider`, `TemplateRenderer` | `SystemRunner`, `PackageManager` |
+| TI-005 | `test_traefik_config_gen.py` | `test_traefik_generates_compose_and_yml` | `TraefikProvider` genera `docker-compose.yml` y `traefik.yml` en `tmp_path`; YAML parseable | `TraefikProvider`, `TemplateRenderer` | `SystemRunner` |
+| TI-006 | `test_traefik_config_gen.py` | `test_traefik_acme_json_chmod_600` | `runner.run(["chmod", "600", ...])` llamado con `sudo=True` | `TraefikProvider` | `SystemRunner` mock que registra calls |
+| TI-007 | `test_certbot_output.py` | `test_parse_certificates_ok_fixture` | `CertbotManager.list_certificates()` parsea fixture → 2 registros con dominio y expiración | `CertbotManager` | `SystemRunner` con stdout = fixture |
+| TI-008 | `test_certbot_output.py` | `test_parse_certificates_empty_fixture` | `CertbotManager.list_certificates()` retorna `[]` con fixture vacía | `CertbotManager` | `SystemRunner` con stdout = fixture |
+| TI-009 | `test_cert_registry_io.py` | `test_registry_persists_and_reads_back` | `add` + `list` + `remove` sobre JSON real en `tmp_path` | `CertRegistry` | ninguno |
+| TI-010 | `test_full_flow.py` | `test_generate_full_flow_nginx_debian` | Flujo completo `CertbotService.generate()` con Nginx en Debian; verifica secuencia de mocks | `CertbotService`, `NginxProvider`, `CertbotManager`, `CertRegistry` | `SystemRunner`, `socket.getaddrinfo`, `tmp_path` |
+
+---
+
 ## Historial de Cambios
 
 | Versión | Fecha | Autor | Cambios |
@@ -449,3 +565,4 @@ Fase 1: Foundation & Setup
 | 1.2 | 2026-03-31 | Ernesto Crespo | Modo interactivo: Fase 7 completa (15 tareas F7-01..F7-15); mapa de dependencias actualizado; resumen corregido a 7 fases/7 semanas; 2 nuevos riesgos de terminal/TUI |
 | 1.3 | 2026-03-31 | Ernesto Crespo | Soporte i18n: Fase 8 completa (13 tareas F8-01..F8-13); resumen 8 fases/8 semanas/2026-05-26; mapa de dependencias Fase 7→Fase 8; nuevo riesgo traducciones incompletas; DoD actualizado con criterios i18n |
 | 1.4 | 2026-03-31 | Ernesto Crespo | Empaquetado nativo: Fase 6 ampliada a 2 semanas con 25 tareas (F6-10..F6-34) para PyPI wheel, .deb (debian/) y .rpm (rpm/spec); pre-requisitos de build; resumen 9 semanas/2026-06-02; estructura packaging/; DoD global con criterios de instalación nativa |
+| 1.5 | 2026-03-31 | Ernesto Crespo | Catálogo de tests: nueva Sección 7 con 80 casos de prueba (TC-001..TC-070 unitarios + TI-001..TI-010 integración) organizados por módulo con entradas, resultado esperado y estrategia de mock; cubre utils, providers, certbot, domain/services, CLI, interactive, i18n |

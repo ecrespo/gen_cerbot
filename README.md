@@ -342,10 +342,13 @@ Al hacer push de un tag `v*` (por ejemplo `git tag v1.0.0 && git push --tags`), 
 ```
 gen_cerbot/
 ├── README.md               ← Este archivo
-├── ARCHITECTURE.md         ← Diseño técnico y decisiones de arquitectura
-├── SPEC.md                 ← Especificación de producto (PRD)
-├── TASKS.md                ← Plan de implementación por fases
+├── CLAUDE.md               ← Instrucciones para el agente de desarrollo
 ├── pyproject.toml
+├── docs/                   ← Documentación SDD del proyecto
+│   ├── PRD.md              ← Product Requirements Document (resumen ejecutivo)
+│   ├── SPEC.md             ← Especificación técnica detallada (RF, RNF, user stories)
+│   ├── ARCHITECTURE.md     ← Diseño técnico, componentes y decisiones de arquitectura
+│   └── TASKS.md            ← Plan de implementación por fases y catálogo de tests
 ├── src/
 │   └── gen_cerbot/
 │       ├── __init__.py
@@ -400,7 +403,7 @@ gen_cerbot/
 │       ├── ci.yml          ← CI: tests en Ubuntu/Fedora en cada PR
 │       └── release.yml     ← Release: build wheel+.deb+.rpm y upload
 ├── nginx-setup.sh          ← Script bash original (referencia)
-└── docs/
+└── docs/                   ← (ver árbol arriba)
 ```
 
 ## Documentación SDD

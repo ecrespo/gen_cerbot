@@ -6,7 +6,7 @@
 |---|---|
 | **Autor** | Ernesto Crespo |
 | **Estado** | `DRAFT` |
-| **Versión** | 1.4 |
+| **Versión** | 1.5 |
 | **Fecha** | 2026-03-31 |
 | **Reviewers** | Por definir |
 | **Última actualización** | 2026-03-31 |
@@ -322,6 +322,29 @@ Empaquetar este conocimiento operacional en un CLI Python reutilizable, testeado
 - **Postcondiciones:** La herramienta está instalada y el comando `gen-cerbot --version` funciona.
 - **Prioridad:** `MUST`
 
+### RF-013: Suite de pruebas automatizadas (unit + integración)
+
+- **Descripción:** El proyecto debe incluir una suite de tests automatizados que cubra la lógica de negocio mediante tests unitarios y los flujos críticos de generación de archivos mediante tests de integración. Los tests deben ejecutarse sin red, sin `sudo` real y sin servidores web instalados, usando mocks y fixtures estáticas.
+- **Actor:** Desarrollador / CI pipeline
+- **Requisitos de tests unitarios:**
+  - Cada módulo en `src/gen_cerbot/` debe tener un archivo `tests/unit/test_<modulo>.py` correspondiente.
+  - Todos los tests unitarios deben pasar con `pytest -m unit` sin acceso a red ni a `/etc/` real.
+  - `SystemRunner` debe mockearse en todos los tests unitarios — ningún test unitario ejecuta subprocesos reales.
+  - `DistroDetector` debe probarse con al menos 4 fixtures de `/etc/os-release`: Ubuntu 22.04, Debian 12, Fedora 40, openSUSE Leap 15.5 y una distribución desconocida.
+  - Los tres `PackageManager` (`Apt`, `Dnf`, `Zypper`) deben probarse de forma independiente verificando que la construcción del comando sea correcta.
+  - `ApacheProvider` debe probarse con los tres `DistroFamily` para verificar que el nombre del paquete Apache y el template usado sean los correctos.
+  - `GenerateWizard` debe probarse con respuestas predefinidas usando `questionary.unsafe_ask()` para cada campo, incluyendo casos de validación fallida (email inválido, puerto fuera de rango).
+  - `LocaleManager.t("clave")` debe retornar el texto del idioma activo; para claves inexistentes en el idioma secundario, debe retornar el texto en inglés sin lanzar excepción.
+- **Requisitos de tests de integración:**
+  - Los tests de integración deben usar `tmp_path` de pytest — nunca escriben en el sistema de archivos real.
+  - Debe existir un test que verifique que `NginxProvider.configure()` genera un archivo de configuración con el dominio y el puerto del backend correctamente interpolados.
+  - Debe existir un test que verifique que `ApacheProvider.configure()` genera templates distintos para `DistroFamily.DEBIAN`, `REDHAT` y `SUSE`.
+  - Debe existir un test que verifique que `TraefikProvider.configure()` crea `acme.json` con permisos 600 y genera `docker-compose.yml` funcional.
+  - Debe existir un test que verifique el parseo de la salida de `certbot certificates` contra la fixture `tests/fixtures/certbot-outputs/certificates_ok.txt`.
+  - Debe existir un test de flujo completo de `CertbotService.generate()` con todos los componentes reales excepto `SystemRunner` (mockeado) y el sistema de archivos (`tmp_path`).
+- **Postcondiciones:** `pytest -m "unit or integration"` pasa con cobertura > 80% en entorno de CI sin red ni privilegios.
+- **Prioridad:** `MUST`
+
 ---
 
 ## 7. Requisitos No Funcionales
@@ -352,9 +375,9 @@ Empaquetar este conocimiento operacional en un CLI Python reutilizable, testeado
 - El CLI debe incluir `--help` detallado en cada subcomando
 - La salida estándar debe usar colores para distinguir INFO, WARNING y ERROR
 
-### Mantenibilidad
+### Calidad y Testing
 
-- Cobertura de tests > 80% (unit + integration)
+- Cobertura de tests > 80% global; módulos críticos (`utils/system.py`, `utils/distro.py`) > 90%
 - El código debe seguir PEP 8 y estar formateado con `ruff`
 - Tipo de anotaciones (type hints) en todas las funciones públicas
 
@@ -544,6 +567,7 @@ Empaquetar este conocimiento operacional en un CLI Python reutilizable, testeado
 | 1.2 | 2026-03-31 | Ernesto Crespo | Modo interactivo: RF-010 modo interactivo con menú y asistente guiado; Épica 4 con US-007..US-010; timeline ampliado a Fase 7 |
 | 1.3 | 2026-03-31 | Ernesto Crespo | Soporte i18n: RF-011 selector de idioma previo al menú, flag --lang, preferencia persistida; US-011; Fase 8 al timeline |
 | 1.4 | 2026-03-31 | Ernesto Crespo | Empaquetado nativo: RF-012 distribución PyPI/.deb/.rpm; Épica 5 con US-012..US-014; dependencias de build en tabla; RNF portabilidad extendida; Fase 6 ampliada a 2 semanas; 3 nuevos riesgos de empaquetado |
+| 1.5 | 2026-03-31 | Ernesto Crespo | Especificaciones de testing: RF-013 suite de tests unitarios e integración con requisitos por módulo (DistroDetector fixtures, PackageManager 3 impls, ApacheProvider 3 DistroFamily, GenerateWizard unsafe_ask, LocaleManager fallback, 6 escenarios de integración, flujo completo CertbotService); RNF Calidad actualizado con cobertura mínima por módulo |
 
 ## Aprobaciones
 
