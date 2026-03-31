@@ -2,189 +2,195 @@
 
 ## Metadata
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| **Producto** | gen_cerbot |
-| **Autor** | Ernesto Crespo |
-| **Estado** | `DRAFT` |
-| **Versión** | 1.0 |
-| **Fecha** | 2026-03-31 |
-| **Última actualización** | 2026-03-31 |
-| **Documentos relacionados** | [SPEC.md](./SPEC.md) · [ARCHITECTURE.md](./ARCHITECTURE.md) · [TASKS.md](./TASKS.md) |
+| **Product** | gen_cerbot |
+| **Author** | Ernesto Crespo |
+| **Status** | `DRAFT` |
+| **Version** | 1.0 |
+| **Date** | 2026-03-31 |
+| **Last updated** | 2026-03-31 |
+| **Related documents** | [SPEC.md](./SPEC.md) · [ARCHITECTURE.md](./ARCHITECTURE.md) · [TASKS.md](./TASKS.md) |
 
 ---
 
-## 1. Resumen Ejecutivo
+## 1. Executive Summary
 
-`gen_cerbot` es una herramienta de línea de comandos (CLI) en Python que automatiza la configuración completa de TLS/SSL para servidores web Linux. Convierte una tarea manual de 20–30 minutos — instalar un servidor web, configurar un proxy reverso, obtener un certificado Let's Encrypt y activar la renovación automática — en un único comando o una experiencia guiada de menos de 5 minutos. Soporta Nginx, Apache y Traefik sobre Debian/Ubuntu, Fedora y openSUSE, y se distribuye como paquete instalable via `pip`, `.deb` y `.rpm`.
-
----
-
-## 2. Problema
-
-Configurar HTTPS en un servidor Linux nuevo implica una secuencia manual de pasos propensos a error:
-
-1. Actualizar el sistema e instalar el servidor web con el gestor de paquetes correcto para la distro
-2. Crear y activar archivos de configuración de virtual host o proxy reverso
-3. Instalar Certbot (método diferente según la distribución: `snap`, `dnf` o `zypper`)
-4. Solicitar el certificado con los flags correctos según el servidor web
-5. Verificar que la configuración resultante es válida
-6. Configurar la renovación automática
-
-Este proceso varía en detalle según el servidor web y la distribución Linux, no está documentado de forma consistente, y es difícil de automatizar en pipelines CI/CD sin una herramienta dedicada. El script bash original `nginx-setup.sh` resolvía el problema parcialmente para Nginx en Ubuntu/Debian, pero no era extensible ni testeable.
+`gen_cerbot` is a Python command-line tool (CLI) that automates the complete TLS/SSL configuration for Linux web servers. It converts a 20–30 minute manual task — installing a web server, configuring a reverse proxy, obtaining a Let's Encrypt certificate, and enabling automatic renewal — into a single command or a guided experience of less than 5 minutes. It supports Nginx, Apache, and Traefik on Debian/Ubuntu, Fedora, and openSUSE, and is distributed as an installable package via `pip`, `.deb`, and `.rpm`.
 
 ---
 
-## 3. Objetivos del Producto
+## 2. Problem
 
-| Objetivo | Métrica de éxito |
+Configuring HTTPS on a new Linux server involves a manual sequence of error-prone steps:
+
+1. Update the system and install the web server with the correct package manager for the distro
+2. Create and enable virtual host or reverse proxy configuration files
+3. Install Certbot (different method depending on the distribution: `snap`, `dnf`, or `zypper`)
+4. Request the certificate with the correct flags for the web server
+5. Verify that the resulting configuration is valid
+6. Set up automatic renewal
+
+This process varies in detail depending on the web server and the Linux distribution, is not consistently documented, and is difficult to automate in CI/CD pipelines without a dedicated tool. The original bash script `nginx-setup.sh` solved the problem partially for Nginx on Ubuntu/Debian, but was not extensible or testable.
+
+---
+
+## 3. Product Goals
+
+| Goal | Success metric |
 |---|---|
-| Reducir el tiempo de configuración TLS/SSL | < 5 minutos desde cero en servidor limpio |
-| Soportar los 3 servidores web más usados | Nginx, Apache y Traefik funcionan en v1.0 |
-| Soportar las 3 familias de distros Linux | Debian/Ubuntu, Fedora y openSUSE funcionan en v1.0 |
-| Ser usable sin documentación adicional | Modo interactivo guiado que no requiere leer el manual |
-| Integrarse en pipelines CI/CD | Todos los pasos accesibles como flags CLI (`--no-interactive`) |
-| Ser distribuible como paquete nativo | `pip install`, `apt install` y `dnf install` funcionales en v1.0 |
-| Alcanzar calidad de software profesional | Cobertura de tests > 80%; `ruff` y `mypy` sin errores |
+| Reduce TLS/SSL configuration time | < 5 minutes from scratch on a clean server |
+| Support the 3 most used web servers | Nginx, Apache, and Traefik working in v1.0 |
+| Support the 3 Linux distro families | Debian/Ubuntu, Fedora, and openSUSE working in v1.0 |
+| Be usable without additional documentation | Guided interactive mode that does not require reading a manual |
+| Integrate into CI/CD pipelines | All steps accessible as CLI flags (`--no-interactive`) |
+| Be distributable as a native package | `pip install`, `apt install`, and `dnf install` functional in v1.0 |
+| Achieve professional software quality | Test coverage > 80%; `ruff` and `mypy` without errors |
 
-### Fuera de alcance (v1.0)
+### Out of scope (v1.0)
 
-- Soporte para Windows o macOS
-- Certificados de pago o de otras CAs (solo Let's Encrypt / ACME)
-- Gestión de múltiples servidores remotos (SSH)
-- Interfaz gráfica (GUI o web)
-- Soporte para distribuciones distintas a las declaradas (CentOS, Arch, Alpine, etc.)
-- Integración con servicios DNS para validación DNS-01
-
----
-
-## 4. Usuarios Objetivo
-
-### Perfil primario — DevOps / Administrador de sistemas
-
-- **Contexto:** Gestiona múltiples servidores Linux, configura nuevos entornos regularmente, trabaja en distintas distribuciones
-- **Pain point:** Configurar HTTPS manualmente consume tiempo y es fuente de errores; necesita automatizarlo en scripts o pipelines
-- **Necesidades clave:** Modo comando directo, flag `--no-interactive`, compatibilidad multi-distro, salida verbose en tiempo real
-
-### Perfil secundario — Desarrollador
-
-- **Contexto:** Desarrolla aplicaciones web dockerizadas, configura su propio servidor de staging o producción
-- **Pain point:** No conoce en detalle la diferencia entre configuraciones de Nginx y Apache, no sabe qué plugin de Certbot usar
-- **Necesidades clave:** Modo interactivo guiado que le pregunte lo que necesita, mensajes de error claros y accionables
-
-### Perfil terciario — Equipo internacional
-
-- **Contexto:** Equipos con miembros en distintos países o idiomas
-- **Pain point:** Herramientas en inglés únicamente generan fricción en equipos hispanohablantes
-- **Necesidades clave:** Interfaz interactiva disponible en español e inglés, selección de idioma al primer uso
+- Support for Windows or macOS
+- Paid certificates or other CAs (Let's Encrypt / ACME only)
+- Management of multiple remote servers (SSH)
+- Graphical interface (GUI or web)
+- Support for distributions other than those declared (CentOS, Arch, Alpine, etc.)
+- Integration with DNS services for DNS-01 validation
 
 ---
 
-## 5. Características del Producto
+## 4. Target Users
 
-### 5.1 Capacidades centrales (MUST — v1.0)
+### Primary profile — DevOps / System Administrator
 
-| Característica | Descripción |
+- **Context:** Manages multiple Linux servers, regularly sets up new environments, works across different distributions
+- **Pain point:** Manually configuring HTTPS consumes time and is a source of errors; needs to automate it in scripts or pipelines
+- **Key needs:** Direct command mode, `--no-interactive` flag, multi-distro compatibility, verbose real-time output
+
+### Secondary profile — Developer
+
+- **Context:** Develops dockerized web applications, configures their own staging or production server
+- **Pain point:** Does not know in detail the difference between Nginx and Apache configurations, does not know which Certbot plugin to use
+- **Key needs:** Guided interactive mode that asks what is needed, clear and actionable error messages
+
+### Tertiary profile — International team
+
+- **Context:** Teams with members in different countries or languages
+- **Pain point:** English-only tools create friction in Spanish-speaking teams
+- **Key needs:** Interactive interface available in Spanish and English, language selection on first use
+
+---
+
+## 5. Product Features
+
+### 5.1 Core capabilities (MUST — v1.0)
+
+| Feature | Description |
 |---|---|
-| Generación de certificado TLS/SSL | Solicita e instala certificado Let's Encrypt para un dominio, configura el servidor web con proxy reverso y activa renovación automática |
-| Soporte Nginx | Provider completo: instalación, configuración de virtual host, proxy reverso, verificación de sintaxis, activación del sitio |
-| Soporte Apache | Provider completo con templates distintos por familia de distro; módulos `mod_proxy` y `mod_ssl` activados automáticamente |
-| Soporte Traefik | Generación de `docker-compose.yml` y `traefik.yml` con ACME integrado; `acme.json` con permisos 600 |
-| Multi-distro | Detección automática de la distro vía `/etc/os-release`; invocación del gestor de paquetes correcto (`apt`, `dnf`, `zypper`) |
-| sudo interno | El CLI corre como usuario normal; privilegios elevados obtenidos de forma granular y transparente mediante `sudo` |
-| Modo interactivo | Menú principal navegable + asistente paso a paso (6 campos con validación) + salida de ejecución en tiempo real |
-| Modo comando directo | Todos los parámetros disponibles como flags CLI; compatible con scripts y pipelines CI/CD |
-| Flag `--no-interactive` | Deshabilita todos los prompts; falla con error si falta algún parámetro requerido |
-| Validación DNS previa | Verifica que el dominio resuelve a la IP del servidor antes de solicitar el certificado |
-| Registro local de certificados | JSON en `~/.config/gen_cerbot/registry.json` que rastrea los certificados gestionados |
-| Operaciones de ciclo de vida | `generate`, `list`, `renew` y `remove` para gestión completa del ciclo de vida |
-| Soporte multi-idioma (i18n) | Interfaz interactiva en inglés (defecto) y español; selector de idioma al primer uso; flag `--lang` |
-| Distribución PyPI | `pip install gen-cerbot` y `pipx install gen-cerbot` funcionales |
-| Distribución .deb | Paquete nativo para Debian/Ubuntu instalable con `apt` o `dpkg` |
-| Distribución .rpm | Paquete nativo para Fedora/openSUSE instalable con `dnf` o `zypper` |
+| TLS/SSL certificate generation | Installs Certbot (per-distro: snap+symlink on Debian/Ubuntu, dnf on Fedora, zypper on openSUSE), requests a Let's Encrypt certificate with `--non-interactive --agree-tos`, configures the web server, and verifies the service with `systemctl status` |
+| Nginx support | Full provider: installation, virtual host configuration, reverse proxy, syntax verification, site activation |
+| Apache support | Full provider with different templates per distro family; `mod_proxy` and `mod_ssl` modules automatically enabled |
+| Traefik support | Generation of `docker-compose.yml` and `traefik.yml` with integrated ACME; `acme.json` with 600 permissions |
+| Multi-distro | Automatic distro detection via `/etc/os-release`; invocation of the correct package manager (`apt`, `dnf`, `zypper`) |
+| Internal sudo | The CLI runs as a normal user; elevated privileges obtained granularly and transparently via `sudo` |
+| Interactive mode | Navigable main menu + step-by-step wizard (6 fields with validation) + real-time execution output |
+| Direct command mode | All parameters available as CLI flags; compatible with scripts and CI/CD pipelines |
+| `--no-interactive` flag | Disables all prompts; fails with error if any required parameter is missing |
+| Prior DNS validation | Verifies that the domain resolves to the server's IP before requesting the certificate |
+| Local certificate registry | JSON at `~/.config/gen_cerbot/registry.json` tracking managed certificates |
+| Lifecycle operations | `generate`, `list`, `renew`, and `remove` for complete lifecycle management |
+| Multi-language support (i18n) | Interactive interface in English (default) and Spanish; language selector on first use; `--lang` flag |
+| PyPI distribution | `pip install gen-cerbot` and `pipx install gen-cerbot` functional |
+| .deb distribution | Native package for Debian/Ubuntu installable with `apt` or `dpkg` |
+| .rpm distribution | Native package for Fedora/openSUSE installable with `dnf` or `zypper` |
 
-### 5.2 Características de calidad (MUST — v1.0)
+### 5.2 Quality features (MUST — v1.0)
 
-| Característica | Descripción |
+| Feature | Description |
 |---|---|
-| Suite de tests automatizados | 80 casos de prueba unitarios (TC-001..TC-070) + 10 de integración (TI-001..TI-010); cobertura > 80% |
-| CI con GitHub Actions | Tests en Ubuntu 22.04/24.04 y Fedora 40 en cada PR; release automático al publicar un tag |
-| Type hints y linting | `mypy --strict` y `ruff check` sin errores en todo el código |
-| Idempotencia | Re-ejecutar el comando en un sistema ya configurado no produce errores ni cambios innecesarios |
-| Dry-run mode | `--dry-run` muestra qué haría el comando sin aplicar ningún cambio real |
+| Automated test suite | 80 unit test cases (TC-001..TC-070) + 10 integration tests (TI-001..TI-010); coverage > 80% |
+| CI with GitHub Actions | Tests on Ubuntu 22.04/24.04 and Fedora 40 on each PR; automatic release when publishing a tag |
+| Type hints and linting | `mypy --strict` and `ruff check` without errors throughout the codebase |
+| Idempotency | Re-running the command on an already-configured system does not produce errors or unnecessary changes |
+| Dry-run mode | `--dry-run` shows what the command would do without applying any real changes |
 
-### 5.3 Deseables (SHOULD — backlog v1.1+)
+### 5.3 Desirable (SHOULD — backlog v1.1+)
 
-- Soporte para certificados wildcard (`*.example.com`) via DNS-01
-- Integración con repositorios de paquetes (PPA para Ubuntu, COPR para Fedora)
-- Soporte para más idiomas (portugués, francés)
-- Plugin para `ansible` o `terraform`
+- Support for wildcard certificates (`*.example.com`) via DNS-01
+- Integration with package repositories (PPA for Ubuntu, COPR for Fedora)
+- Support for more languages (Portuguese, French)
+- Plugin for `ansible` or `terraform`
 
 ---
 
-## 6. Requisitos No Funcionales Clave
+## 6. Key Non-Functional Requirements
 
-| Atributo | Requisito |
+| Attribute | Requirement |
 |---|---|
-| **Rendimiento** | `generate` completa en < 5 min (excluye descarga de paquetes en primera instalación) |
-| **Seguridad** | Rechaza ejecución como root; `sudo` solo en comandos que lo requieren; claves privadas nunca en stdout |
-| **Compatibilidad** | Python 3.11+; Debian 11/12, Ubuntu 20.04/22.04/24.04, Fedora 38/39/40, openSUSE Leap 15.5+ |
-| **Usabilidad** | `--help` detallado en cada subcomando; errores claros e indicando cómo resolverlos |
-| **Portabilidad** | Instalable via `pip`, `.deb` y `.rpm` sin exponer detalles de Python al usuario final |
-| **Mantenibilidad** | Cobertura > 80%; cero `TODO` o `FIXME` sin ticket asociado en la release |
+| **Performance** | `generate` completes in < 5 min (excludes package download on first installation) |
+| **Security** | Rejects execution as root; `sudo` only on commands that require it; private keys never in stdout |
+| **Compatibility** | Python 3.11+; Debian 11/12, Ubuntu 20.04/22.04/24.04, Fedora 38/39/40, openSUSE Leap 15.5+ |
+| **Usability** | Detailed `--help` on each subcommand; clear errors indicating how to resolve them |
+| **Portability** | Installable via `pip`, `.deb`, and `.rpm` without exposing Python details to the end user |
+| **Maintainability** | Coverage > 80%; zero `TODO` or `FIXME` without an associated ticket in the release |
 
 ---
 
-## 7. Restricciones
+## 7. Constraints
 
-- Requiere acceso a internet para contactar los servidores ACME de Let's Encrypt
-- El puerto 80 debe estar libre durante la validación HTTP-01
-- El usuario debe tener acceso a `sudo` (no se requiere ejecutar como root)
-- Certbot se instala por distro: `snap` en Debian/Ubuntu, `dnf` en Fedora, `zypper` en openSUSE
+- Requires internet access to contact Let's Encrypt ACME servers
+- Port 80 must be free during HTTP-01 validation
+- The user must have access to `sudo` (running as root is not required)
+- **Certbot installation is per distro:**
+  - Debian/Ubuntu: `snapd` must be installed → `snap install --classic certbot` → symlink at `/usr/local/bin/certbot`
+  - Fedora: `dnf install -y certbot python3-certbot-nginx python3-certbot-apache`
+  - openSUSE: `zypper install -y certbot python3-certbot-nginx python3-certbot-apache`
+  - Traefik does **not** use Certbot — ACME is handled natively inside `traefik.yml`
+- The Certbot `--non-interactive` flag is always used; `--agree-tos` and `--email` are required parameters
 
 ---
 
-## 8. Métricas de Éxito
+## 8. Success Metrics
 
-| Métrica | Objetivo v1.0 |
+| Metric | v1.0 target |
 |---|---|
-| Tiempo medio de configuración TLS/SSL (modo interactivo) | < 5 minutos en servidor limpio |
-| Cobertura de tests automatizados | > 80% global; módulos críticos > 90% |
-| Distribuciones Linux soportadas | 3 familias (Debian, RedHat/Fedora, SUSE) |
-| Servidores web soportados | 3 (Nginx, Apache, Traefik) |
-| Formatos de distribución | 3 (pip/PyPI, .deb, .rpm) |
-| Tests E2E pasando en VM limpia | Ubuntu 22.04, Fedora 40, openSUSE Leap 15.5 |
-| Idiomas de interfaz interactiva | 2 (English, Español) |
+| Average TLS/SSL configuration time (interactive mode) | < 5 minutes on a clean server |
+| Automated test coverage | > 80% global; critical modules > 90% |
+| Supported Linux distributions | 3 families (Debian, RedHat/Fedora, SUSE) |
+| Supported web servers | 3 (Nginx, Apache, Traefik) |
+| Distribution formats | 3 (pip/PyPI, .deb, .rpm) |
+| E2E tests passing on clean VM | Ubuntu 22.04, Fedora 40, openSUSE Leap 15.5 |
+| Interactive interface languages | 2 (English, Spanish) |
 
 ---
 
-## 9. Roadmap de Alto Nivel
+## 9. High-Level Roadmap
 
-| Fase | Duración | Entregable principal |
+| Phase | Duration | Main deliverable |
 |---|---|---|
-| **Fase 1:** Foundation | 1 semana | Estructura del proyecto, modelos, utils (SystemRunner, DistroDetector, PackageManager) |
-| **Fase 2:** Nginx Provider | 1 semana | Provider Nginx completo y testeado en las 3 distros |
-| **Fase 3:** Apache + Traefik | 1 semana | Providers Apache (3 templates por distro) y Traefik |
-| **Fase 4:** Certbot Manager | 1 semana | Instalación y gestión de certificados completa |
-| **Fase 5:** CLI completo | 1 semana | Subcomandos `generate`, `list`, `renew`, `remove` funcionales |
-| **Fase 6:** Testing & Packaging | 2 semanas | Cobertura > 80%; PyPI wheel + paquete .deb + paquete .rpm |
-| **Fase 7:** Modo Interactivo | 1 semana | Menú, asistente guiado, salida en tiempo real |
-| **Fase 8:** Soporte i18n | 1 semana | Selector de idioma, LocaleManager, locales en/es |
-| **Total** | **9 semanas** | **Release v1.0.0** (objetivo: 2026-06-02) |
+| **Phase 1:** Foundation | 1 week | Project structure, models, utils (SystemRunner, DistroDetector, PackageManager) |
+| **Phase 2:** Nginx Provider | 1 week | Complete and tested Nginx provider on all 3 distros |
+| **Phase 3:** Apache + Traefik | 1 week | Apache (3 templates per distro) and Traefik providers |
+| **Phase 4:** Certbot Manager | 1 week | Complete certificate installation and lifecycle management |
+| **Phase 5:** Full CLI | 1 week | `generate`, `list`, `renew`, `remove` subcommands functional |
+| **Phase 6:** Testing & Packaging | 2 weeks | Coverage > 80%; PyPI wheel + .deb package + .rpm package |
+| **Phase 7:** Interactive Mode | 1 week | Menu, guided wizard, real-time output |
+| **Phase 8:** i18n Support | 1 week | Language selector, LocaleManager, en/es locales |
+| **Total** | **9 weeks** | **Release v1.0.0** (target: 2026-06-02) |
 
 ---
 
-## 10. Aprobaciones
+## 10. Approvals
 
-| Rol | Nombre | Fecha | Estado |
+| Role | Name | Date | Status |
 |---|---|---|---|
-| Product Owner | Ernesto Crespo | — | ☐ Pendiente |
-| Tech Lead | Por definir | — | ☐ Pendiente |
+| Product Owner | Ernesto Crespo | — | ☐ Pending |
+| Tech Lead | To be defined | — | ☐ Pending |
 
 ---
 
-## Historial de Cambios
+## Change History
 
-| Versión | Fecha | Autor | Cambios |
+| Version | Date | Author | Changes |
 |---|---|---|---|
-| 1.0 | 2026-03-31 | Ernesto Crespo | Versión inicial: problema, objetivos, usuarios, features MUST/SHOULD, RNF, restricciones, métricas de éxito, roadmap de 9 fases |
+| 1.0 | 2026-03-31 | Ernesto Crespo | Initial version: problem, goals, personas, MUST/SHOULD features table, NFR, constraints, success metrics, 9-phase roadmap |
+| 1.1 | 2026-03-31 | Ernesto Crespo | Certbot installation detail: per-distro install method (snap+symlink/dnf/zypper), --non-interactive flag, post-cert service verification; Traefik uses ACME natively (no Certbot); snapd prerequisite for Debian/Ubuntu |

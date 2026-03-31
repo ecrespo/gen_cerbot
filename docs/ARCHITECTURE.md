@@ -2,48 +2,48 @@
 
 ## Metadata
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| **Autor** | Ernesto Crespo |
-| **Estado** | `DRAFT` |
-| **Versión** | 1.5 |
-| **Fecha** | 2026-03-31 |
-| **SPEC Relacionado** | [SPEC.md](./SPEC.md) |
-| **Reviewers** | Por definir |
+| **Author** | Ernesto Crespo |
+| **Status** | `DRAFT` |
+| **Version** | 1.6 |
+| **Date** | 2026-03-31 |
+| **Related SPEC** | [SPEC.md](./SPEC.md) |
+| **Reviewers** | To be defined |
 
 ---
 
-## 1. Contexto
+## 1. Context
 
-`gen_cerbot` es una herramienta CLI que automatiza la configuración TLS/SSL para múltiples servidores web. Técnicamente, el problema se descompone en dos responsabilidades independientes: (a) configurar el servidor web (Nginx, Apache, Traefik) con reverse proxy y las directivas correctas, y (b) gestionar el ciclo de vida de los certificados Let's Encrypt a través de Certbot.
+`gen_cerbot` is a CLI tool that automates TLS/SSL configuration for multiple web servers. Technically, the problem decomposes into two independent responsibilities: (a) configuring the web server (Nginx, Apache, Traefik) with reverse proxy and the correct directives, and (b) managing the lifecycle of Let's Encrypt certificates through Certbot.
 
-El script bash original (`nginx-setup.sh`) combina ambas responsabilidades en un único flujo secuencial, lo que lo hace frágil, difícil de testear y no extensible a otros servidores. La arquitectura propuesta separa estas responsabilidades en módulos independientes bajo un patrón Provider que permite agregar nuevos servidores sin modificar el código central.
+The original bash script (`nginx-setup.sh`) combines both responsibilities into a single sequential flow, making it fragile, difficult to test, and not extensible to other servers. The proposed architecture separates these responsibilities into independent modules under a Provider pattern that allows adding new servers without modifying core code.
 
-La herramienta corre en el sistema operativo del servidor (Ubuntu/Debian, Fedora, openSUSE), detecta la distribución en tiempo de ejecución e invoca el gestor de paquetes apropiado (`apt-get`, `dnf`, `zypper`) para instalar dependencias al vuelo. Todos los comandos que requieren privilegios elevados se ejecutan anteponiendo `sudo` de forma interna — el usuario corre el CLI como usuario normal y la herramienta escala privilegios de forma granular solo donde es necesario. La herramienta también lee y escribe archivos de configuración del servidor y se comunica con los servicios ACME de Let's Encrypt a través de Certbot.
-
----
-
-## 2. Objetivos Técnicos
-
-- **Correctitud:** Los archivos de configuración generados deben ser válidos y seguros para producción; el proceso debe ser idempotente
-- **Extensibilidad:** Agregar soporte para un nuevo servidor web debe requerir solo crear un nuevo Provider sin modificar el core
-- **Testabilidad:** El código debe ser testeable con mocks del sistema de archivos y de los comandos del sistema
-- **Mantenibilidad:** Cobertura de tests > 80%, type hints en todas las funciones públicas, código formateado con ruff
-- **Usabilidad:** Modo interactivo con menú guiado como modo por defecto; modo comando como alternativa para automatización; salida en tiempo real con indicadores visuales
+The tool runs on the server's operating system (Ubuntu/Debian, Fedora, openSUSE), detects the distribution at runtime, and invokes the appropriate package manager (`apt-get`, `dnf`, `zypper`) to install dependencies on the fly. All commands that require elevated privileges are executed by internally prepending `sudo` — the user runs the CLI as a normal user and the tool escalates privileges granularly only where necessary. The tool also reads and writes server configuration files and communicates with Let's Encrypt ACME services through Certbot.
 
 ---
 
-## 3. Arquitectura Propuesta
+## 2. Technical Goals
 
-### 3.1 Diagrama de Alto Nivel
+- **Correctness:** Generated configuration files must be valid and production-safe; the process must be idempotent
+- **Extensibility:** Adding support for a new web server must require only creating a new Provider without modifying core code
+- **Testability:** Code must be testable with filesystem and system command mocks
+- **Maintainability:** Test coverage > 80%, type hints on all public functions, code formatted with ruff
+- **Usability:** Interactive mode with guided menu as default; command mode as alternative for automation; real-time output with visual indicators
+
+---
+
+## 3. Proposed Architecture
+
+### 3.1 High-Level Diagram
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                      Punto de entrada                            │
-│              gen-cerbot  (sin args → modo interactivo)           │
-└──────────────────────────────┬───────────────────────────────────┘
-                               │
-                               ▼
+│                      Entry point                                 │
+│              gen-cerbot  (no args → interactive mode)             │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │
+                           ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                 LanguageSelector / LocaleManager (i18n)          │
 │  --lang flag → config.toml → selector questionary → fallback en  │
@@ -51,7 +51,7 @@ La herramienta corre en el sistema operativo del servidor (Ubuntu/Debian, Fedora
                │                           │
                ▼                           ▼
 ┌──────────────────────────┐   ┌───────────────────────────────────┐
-│   Modo Interactivo        │   │   Modo Comando (Typer)            │
+│   Interactive Mode        │   │   Command Mode (Typer)            │
 │   InteractiveMenu         │   │   generate | list | renew | remove│
 │   GenerateWizard          │   └──────────────┬────────────────────┘
 │   LiveOutputRenderer      │                  │
@@ -75,7 +75,7 @@ La herramienta corre en el sistema operativo del servidor (Ubuntu/Debian, Fedora
          │             │   check_domain_resolves_to_ip()        │
          ▼             └───────────────────────────────────────┘
 ┌──────────────────────────────────────────────────────────────┐
-│               PackageManager (abstracción)                   │
+│               PackageManager (abstraction)                   │
 │   install(pkg) / update() / is_installed(pkg)                │
 │                                                              │
 │  AptPackageManager  DnfPackageManager  ZypperPackageManager  │
@@ -85,315 +85,356 @@ La herramienta corre en el sistema operativo del servidor (Ubuntu/Debian, Fedora
                          ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                  SystemRunner                                │
-│   run(cmd, sudo=True/False) → subprocess con sudo interno    │
+│   run(cmd, sudo=True/False) → subprocess with internal sudo  │
 └──────────────────────────────────────────────────────────────┘
                          ▲
                          │
 ┌──────────────────────────────────────────────────────────────┐
 │                  DistroDetector                              │
-│   detect() → lee /etc/os-release → DistroFamily enum        │
+│   detect() → reads /etc/os-release → DistroFamily enum       │
 │   (DEBIAN | REDHAT | SUSE | UNKNOWN)                        │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Componentes
+### 3.2 Components
 
-| Componente | Módulo Python | Responsabilidad |
+| Component | Python Module | Responsibility |
 |---|---|---|
-| Entry point | `cli.py` | Sin args → lanza InteractiveMenu; con args → Typer |
-| InteractiveMenu | `interactive/menu.py` | Menú principal navegable (questionary); routing a wizard o subcomandos |
-| GenerateWizard | `interactive/wizard.py` | Asistente paso a paso: dominio → puerto → pkg-family → servidor → email → confirmación |
-| LiveOutputRenderer | `interactive/output.py` | Imprime salida de ejecución en tiempo real con `[✔]`/`[→]`/`[✗]` via rich |
-| LocaleManager | `i18n/locale_manager.py` | Carga el archivo JSON del idioma activo y resuelve claves de texto; fallback a `en` |
-| LanguageSelector | `i18n/selector.py` | Muestra selector `questionary` de idioma si no hay preferencia guardada; persiste en config.toml |
-| CLI (Typer) | `cli.py` | Subcomandos directos: generate, list, renew, remove; flags `--no-interactive`, `--lang` |
-| CertbotService | `domain/services.py` | Orquestación del flujo completo generate/renew/remove |
-| ServerProvider (ABC) | `providers/base.py` | Interfaz abstracta: `install()`, `configure()`, `verify()`, `remove()` |
-| NginxProvider | `providers/nginx.py` | Configuración Nginx multi-distro usando PackageManager |
-| ApacheProvider | `providers/apache.py` | Configuración Apache multi-distro usando PackageManager |
-| TraefikProvider | `providers/traefik.py` | Generación de docker-compose.yml + traefik.yml |
+| Entry point | `cli.py` | No args → launches InteractiveMenu; with args → Typer |
+| InteractiveMenu | `interactive/menu.py` | Main navigable menu (questionary); routing to wizard or subcommands |
+| GenerateWizard | `interactive/wizard.py` | Step-by-step assistant: domain → port → pkg-family → server → email → confirmation |
+| LiveOutputRenderer | `interactive/output.py` | Prints execution output in real-time with `[✔]`/`[→]`/`[✗]` via rich |
+| LocaleManager | `i18n/locale_manager.py` | Loads active language JSON file and resolves text keys; fallback to `en` |
+| LanguageSelector | `i18n/selector.py` | Shows language `questionary` selector if no saved preference; persists in config.toml |
+| CLI (Typer) | `cli.py` | Direct subcommands: generate, list, renew, remove; flags `--no-interactive`, `--lang` |
+| CertbotService | `domain/services.py` | Orchestration of complete generate/renew/remove flow |
+| ServerProvider (ABC) | `providers/base.py` | Abstract interface: `install()`, `configure()`, `verify()`, `remove()` |
+| NginxProvider | `providers/nginx.py` | Multi-distro Nginx configuration using PackageManager |
+| ApacheProvider | `providers/apache.py` | Multi-distro Apache configuration using PackageManager |
+| TraefikProvider | `providers/traefik.py` | docker-compose.yml + traefik.yml generation |
 | CertbotManager | `certbot/manager.py` | Wraps certbot CLI: install, certonly, renew, revoke, certificates |
-| CertbotInstaller | `certbot/installer.py` | Detecta e instala Certbot según la distro (snap / dnf / zypper) |
-| DistroDetector | `utils/distro.py` | Lee `/etc/os-release` y retorna `DistroFamily` (DEBIAN, REDHAT, SUSE) |
-| PackageManager (ABC) | `utils/package_manager.py` | Interfaz abstracta: `install()`, `update()`, `is_installed()` |
-| AptPackageManager | `utils/package_manager.py` | Implementación `apt-get` para Debian/Ubuntu |
-| DnfPackageManager | `utils/package_manager.py` | Implementación `dnf` para Fedora/RHEL |
-| ZypperPackageManager | `utils/package_manager.py` | Implementación `zypper` para openSUSE |
-| DNSValidator | `utils/dns.py` | Resuelve el dominio y compara contra IPs locales del servidor |
-| CertRegistry | `utils/registry.py` | Lee y escribe el registro JSON local de certificados gestionados |
-| SystemRunner | `utils/system.py` | Abstracción subprocess con soporte `sudo=True/False` por comando |
-| TemplateRenderer | `utils/templates.py` | Renderiza plantillas Jinja2 para archivos de configuración |
-| Config | `core/config.py` | Configuración global: rutas, defaults, variables de entorno |
-| Exceptions | `core/exceptions.py` | Jerarquía de excepciones del dominio |
+| CertbotInstaller | `certbot/installer.py` | Installs Certbot per distro: (1) Debian/Ubuntu → snapd check + `snap install --classic certbot` + symlink `/usr/local/bin/certbot`; (2) Fedora → `dnf install -y certbot python3-certbot-nginx python3-certbot-apache`; (3) openSUSE → `zypper install -y certbot python3-certbot-nginx python3-certbot-apache`; (4) Traefik → no Certbot |
+| DistroDetector | `utils/distro.py` | Reads `/etc/os-release` and returns `DistroFamily` (DEBIAN, REDHAT, SUSE) |
+| PackageManager (ABC) | `utils/package_manager.py` | Abstract interface: `install()`, `update()`, `is_installed()` |
+| AptPackageManager | `utils/package_manager.py` | `apt-get` implementation for Debian/Ubuntu |
+| DnfPackageManager | `utils/package_manager.py` | `dnf` implementation for Fedora/RHEL |
+| ZypperPackageManager | `utils/package_manager.py` | `zypper` implementation for openSUSE |
+| DNSValidator | `utils/dns.py` | Resolves domain and compares against server's local IPs |
+| CertRegistry | `utils/registry.py` | Reads and writes local JSON registry of managed certificates |
+| SystemRunner | `utils/system.py` | subprocess abstraction with `sudo=True/False` support per command |
+| TemplateRenderer | `utils/templates.py` | Renders Jinja2 templates for configuration files |
+| Config | `core/config.py` | Global configuration: paths, defaults, environment variables |
+| Exceptions | `core/exceptions.py` | Domain exception hierarchy |
 
-### 3.3 Estructura de Archivos del Proyecto
+### 3.3 Project File Structure
 
 ```
 src/gen_cerbot/
 ├── __init__.py
-├── cli.py                      # Entry point: sin args → InteractiveMenu; con args → Typer subcomandos
+├── cli.py                      # Entry point: no args → InteractiveMenu; with args → Typer subcommands
 ├── core/
 │   ├── config.py               # Paths, defaults, env vars (pydantic-settings)
 │   └── exceptions.py           # DomainError, DNSError, CertbotError, ServerConfigError, UnsupportedDistroError
 ├── domain/
 │   ├── models.py               # CertificateConfig, ServerType (Enum), CertificateStatus, DistroFamily
-│   └── services.py             # CertbotService: orquestación principal
+│   └── services.py             # CertbotService: main orchestration
 ├── providers/
-│   ├── base.py                 # ServerProvider (ABC) — recibe PackageManager en constructor
+│   ├── base.py                 # ServerProvider (ABC) — receives PackageManager in constructor
 │   ├── nginx.py                # NginxProvider (multi-distro)
 │   ├── apache.py               # ApacheProvider (multi-distro)
 │   ├── traefik.py              # TraefikProvider
 │   └── factory.py              # ProviderFactory.get(server_type, pkg_manager)
 ├── interactive/
-│   ├── menu.py                 # InteractiveMenu: menú principal con questionary
-│   ├── wizard.py               # GenerateWizard: recoge subdominio, puerto, pkg-family, servidor
-│   └── output.py               # LiveOutputRenderer: impresión en tiempo real con rich
+│   ├── menu.py                 # InteractiveMenu: main menu with questionary
+│   ├── wizard.py               # GenerateWizard: collects subdomain, port, pkg-family, server
+│   └── output.py               # LiveOutputRenderer: real-time printing with rich
 ├── i18n/
-│   ├── locale_manager.py       # LocaleManager: carga locale JSON activo; t("key") → texto
-│   ├── selector.py             # LanguageSelector: prompt questionary + persistencia config.toml
+│   ├── locale_manager.py       # LocaleManager: loads active locale JSON; t("key") → text
+│   ├── selector.py             # LanguageSelector: questionary prompt + config.toml persistence
 │   └── locales/
-│       ├── en.json             # Todas las cadenas de la interfaz en inglés (idioma por defecto)
-│       └── es.json             # Traducción al español
+│       ├── en.json             # All interface strings in English (default language)
+│       └── es.json             # Spanish translation
 ├── certbot/
-│   ├── installer.py            # Detecta/instala Certbot: snap (Debian), dnf (Fedora), zypper (SUSE)
-│   └── manager.py              # Wraps certbot CLI con sudo interno
+│   ├── installer.py            # Detects/installs Certbot: snap (Debian), dnf (Fedora), zypper (SUSE)
+│   └── manager.py              # Wraps certbot CLI with internal sudo
 ├── utils/
-│   ├── distro.py               # DistroDetector: lee /etc/os-release → DistroFamily
+│   ├── distro.py               # DistroDetector: reads /etc/os-release → DistroFamily
 │   ├── package_manager.py      # PackageManager (ABC) + Apt/Dnf/ZypperPackageManager
-│   ├── dns.py                  # Resolución DNS y comparación de IPs
-│   ├── system.py               # SystemRunner: subprocess con parámetro sudo=True/False
-│   ├── registry.py             # JSON registry de certs gestionados
+│   ├── dns.py                  # DNS resolution and IP comparison
+│   ├── system.py               # SystemRunner: subprocess with sudo=True/False parameter
+│   ├── registry.py             # JSON registry of managed certs
 │   └── templates.py            # Jinja2 renderer
 └── templates/
     ├── nginx/
-    │   └── site.conf.j2        # Template VirtualHost Nginx (válido para todas las distros)
+    │   └── site.conf.j2        # Nginx VirtualHost template (valid for all distros)
     ├── apache/
-    │   ├── vhost-debian.conf.j2    # Template Apache para Debian/Ubuntu
-    │   ├── vhost-redhat.conf.j2    # Template Apache para Fedora/RHEL
-    │   └── vhost-suse.conf.j2      # Template Apache para openSUSE
+    │   ├── vhost-debian.conf.j2    # Apache template for Debian/Ubuntu
+    │   ├── vhost-redhat.conf.j2    # Apache template for Fedora/RHEL
+    │   └── vhost-suse.conf.j2      # Apache template for openSUSE
     └── traefik/
         ├── docker-compose.yml.j2
         └── traefik.yml.j2
 ```
 
-### 3.4 Flujo de entrada: modo interactivo vs. modo comando
+### 3.4 Entry Flow: Interactive Mode vs. Command Mode
 
 ```
-gen-cerbot  (sin args)
+gen-cerbot  (no args)
   └──▶ LanguageSelector.resolve()
-         ├── Si --lang <code> fue pasado → LocaleManager.set(code)
-         ├── Si config.toml tiene preferencia → LocaleManager.set(saved_lang)
-         └── Si ninguna → muestra selector questionary → guarda en config.toml
+         ├── If --lang <code> was passed → LocaleManager.set(code)
+         ├── If config.toml has preference → LocaleManager.set(saved_lang)
+         └── If none → shows questionary selector → saves to config.toml
                   Select your language / Selecciona tu idioma:
                    ❯  English
                       Español
-  └──▶ InteractiveMenu.run()   ← todos los textos vía LocaleManager.t("key")
-         ├── Opción "Generate certificate" → GenerateWizard.run()
-         │     1. Solicita subdominio (validación regex dominio)
-         │     2. Solicita puerto dockerizado (default 8000, rango 1-65535)
-         │     3. Selección pkg-family: deb | rpm
-         │     4. Selección servidor: nginx | apache | traefik
-         │     5. Solicita email para Let's Encrypt
-         │     6. Solicita nombre del proyecto
-         │     7. Muestra resumen + confirmación (t("wizard.confirm"))
-         │     8. Si confirma → CertbotService.generate(config)
-         │                       con LiveOutputRenderer.attach()
-         ├── Opción "List certificates" → CertbotService.list()
-         ├── Opción "Renew certificates" → CertbotService.renew()
-         ├── Opción "Remove certificate" → solicita dominio → CertbotService.remove()
-         └── Opción "Exit" → sys.exit(0)
+  └──▶ InteractiveMenu.run()   ← all text via LocaleManager.t("key")
+         ├── Option "Generate certificate" → GenerateWizard.run()
+         │     1. Asks for subdomain (domain regex validation)
+         │     2. Asks for dockerized port (default 8000, range 1-65535)
+         │     3. Package family selection: deb | rpm
+         │     4. Server selection: nginx | apache | traefik
+         │     5. Asks for Let's Encrypt email
+         │     6. Asks for project name
+         │     7. Shows summary + confirmation (t("wizard.confirm"))
+         │     8. If confirms → CertbotService.generate(config)
+         │                       with LiveOutputRenderer.attach()
+         ├── Option "List certificates" → CertbotService.list()
+         ├── Option "Renew certificates" → CertbotService.renew()
+         ├── Option "Remove certificate" → asks for domain → CertbotService.remove()
+         └── Option "Exit" → sys.exit(0)
 
 gen-cerbot --lang es generate --server nginx --domain X --port Y --pkg-family deb ...
-  └──▶ LocaleManager.set("es") → Typer parsea flags → crea CertificateConfig → CertbotService.generate(config)
+  └──▶ LocaleManager.set("es") → Typer parses flags → creates CertificateConfig → CertbotService.generate(config)
 ```
 
-**Selección de familia de paquetes en modo interactivo:**
+**Package family selection in interactive mode:**
 
-El asistente siempre pregunta explícitamente por la familia (`deb`/`rpm`) en lugar de auto-detectar, para que el usuario confirme conscientemente el gestor que se usará. Si el usuario quiere auto-detección puede seleccionar una tercera opción `"Detectar automáticamente"`.
-
-```
-  Familia de paquetes del sistema:
-    ❯  deb  — Debian / Ubuntu  (usa apt-get)
-       rpm  — Fedora           (usa dnf)
-       rpm  — openSUSE         (usa zypper)
-       Detectar automáticamente
-```
-
-### 3.5 Flujo Principal: `generate` (CertbotService)
+The assistant always explicitly asks for the family (`deb`/`rpm`) rather than auto-detecting, so the user consciously confirms the manager that will be used. If the user wants auto-detection they can select a third option `"Auto-detect"`.
 
 ```
-1. CLI / wizard crea CertificateConfig (incluye pkg_family seleccionada)
-2. CertbotService.generate(config) inicia el flujo:
-   a. SystemRunner verifica si usuario es root → advertencia/error (aborta)
-   b. distro = DistroDetector.detect() → lee /etc/os-release → DistroFamily
+  System package family:
+    ❯  deb  — Debian / Ubuntu  (uses apt-get)
+       rpm  — Fedora           (uses dnf)
+       rpm  — openSUSE         (uses zypper)
+       Auto-detect
+```
+
+### 3.5 Main Flow: `generate` (CertbotService)
+
+```
+1. CLI / wizard creates CertificateConfig (includes selected pkg_family)
+2. CertbotService.generate(config) starts the flow:
+   a. SystemRunner checks if user is root → warning/error (aborts)
+   b. distro = DistroDetector.detect() → reads /etc/os-release → DistroFamily
    c. pkg_manager = PackageManagerFactory.get(distro) → Apt/Dnf/ZypperPackageManager
-   d. DNSValidator.check(domain) → error si DNS no resuelve (salvo --skip-dns-check)
+   d. DNSValidator.check(domain) → error if DNS doesn't resolve (except --skip-dns-check)
    e. Provider = ProviderFactory.get(server_type, pkg_manager)
-   f. Provider.install() → pkg_manager.install(paquetes) con sudo interno
-   g. Provider.configure(config) → genera y activa config del servidor (con sudo)
+   f. Provider.install() → pkg_manager.install(packages) with internal sudo
+   g. Provider.configure(config) → generates and activates server config (with sudo)
    h. Provider.verify() → sudo nginx -t / apache -t / docker compose config
-   i. CertbotInstaller.ensure_installed(pkg_manager) → instala Certbot según distro
-   j. CertbotManager.request(domain, email, staging) → sudo certbot …
-   k. CertRegistry.register(config) → guarda en registro local (~/.config/gen_cerbot/)
-   l. CLI muestra mensaje de éxito con URL HTTPS
+   i. CertbotInstaller.ensure_installed(distro_family, server_type):
+      - If server_type == TRAEFIK: skip (ACME native, no Certbot needed)
+      - Debian/Ubuntu: apt install snapd → snap install --classic certbot → ln -sf /snap/bin/certbot /usr/local/bin/certbot
+      - Fedora: dnf install -y certbot python3-certbot-nginx python3-certbot-apache
+      - openSUSE: zypper install -y certbot python3-certbot-nginx python3-certbot-apache
+      - If already installed (certbot --version returns 0): skip all steps (idempotent)
+   j. CertbotManager.request(domain, email, server_type, staging):
+      - Nginx: sudo certbot --nginx -d domain --non-interactive --agree-tos --email email
+      - Apache: sudo certbot --apache -d domain --non-interactive --agree-tos --email email
+      - Traefik: skip (certificate obtained by Traefik ACME engine on first request)
+   j2. CertbotManager.verify_service(server_type, distro_family) → systemctl status post-cert check
+   k. CertRegistry.register(config) → saves to local registry (~/.config/gen_cerbot/)
+   l. CLI shows success message with HTTPS URL
 ```
 
-**Flujo de error / compensación:**
+**Error / compensation flow:**
 
 ```
-- En modo interactivo: cada error se muestra con `[✗]` + mensaje + opción "Reintentar / Volver al menú"
-- En modo comando: cada error lanza excepción con mensaje accionable y exit code != 0
-- Si paso 2a falla (usuario es root) → mostrar advertencia + instrucción de uso; abortar
-- Si paso 2b falla (distro no reconocida) → mostrar distros soportadas; abortar
-- Si paso 2d falla (DNS) → mostrar error + sugerir --skip-dns-check; abortar
-- Si paso 2f falla (instalación pkg) → mostrar error + comando manual equivalente; abortar
-- Si paso 2g falla (config inválida) → mostrar error + revertir archivo creado; abortar
-- Si paso 2j falla (rate limit Certbot) → mostrar error + sugerir --staging; config queda intacta
-- Si paso 2j falla (puerto 80 ocupado) → mostrar qué proceso ocupa el puerto; abortar
+- In interactive mode: each error is shown with `[✗]` + message + option "Retry / Back to menu"
+- In command mode: each error raises exception with actionable message and exit code != 0
+- If step 2a fails (user is root) → show warning + usage instruction; abort
+- If step 2b fails (distro not recognized) → show supported distros; abort
+- If step 2d fails (DNS) → show error + suggest --skip-dns-check; abort
+- If step 2f fails (pkg installation) → show error + equivalent manual command; abort
+- If step 2g fails (invalid config) → show error + revert created file; abort
+- If step 2j fails (Certbot rate limit) → show error + suggest --staging; config stays intact
+- If step 2j fails (port 80 occupied) → show which process occupies port; abort
 ```
 
-### 3.5 Flujo: `list`
+### 3.5 Flow: `list`
 
 ```
-1. CertRegistry.list_all() → lee registro local JSON
-2. Para cada cert: CertbotManager.get_expiry(domain) → fecha real de Certbot
-3. Calcular estado: OK (>30d), WARNING (7-30d), EXPIRED (<7d o pasada)
-4. CLI renderiza tabla con colores
+1. CertRegistry.list_all() → reads local JSON registry
+2. For each cert: CertbotManager.get_expiry(domain) → actual expiry date from Certbot
+3. Calculate status: OK (>30d), WARNING (7-30d), EXPIRED (<7d or past)
+4. CLI renders table with colors
 ```
 
-### 3.6 Flujo: `renew`
+### 3.6 Flow: `renew`
 
 ```
-1. Si --domain especificado: CertbotManager.renew(domain)
-   Sino: CertbotManager.renew_all()
-2. CLI muestra resultado de Certbot (renovados, omitidos, fallidos)
+1. If --domain specified: CertbotManager.renew(domain)
+   Else: CertbotManager.renew_all()
+2. CLI shows Certbot result (renewed, skipped, failed)
 ```
+
+### 3.7 Certbot Installation and Execution Matrix
+
+#### Installation by distro family
+
+| Distro family | Prerequisite check | Install command | Post-install step |
+|---|---|---|---|
+| Debian / Ubuntu | `dpkg -l snapd` → install snapd if missing | `sudo snap install --classic certbot` | `sudo ln -sf /snap/bin/certbot /usr/local/bin/certbot` |
+| Fedora (RHEL) | N/A | `sudo dnf install -y certbot python3-certbot-nginx python3-certbot-apache` | N/A |
+| openSUSE | N/A | `sudo zypper install -y certbot python3-certbot-nginx python3-certbot-apache` | N/A |
+| (Traefik) | N/A — ACME native | Not installed | Not installed |
+
+#### Certificate request by server type
+
+| Web server | Command | Notes |
+|---|---|---|
+| Nginx | `sudo certbot --nginx -d <domain> --non-interactive --agree-tos --email <email>` | Plugin `python3-certbot-nginx` must be installed |
+| Apache | `sudo certbot --apache -d <domain> --non-interactive --agree-tos --email <email>` | Plugin `python3-certbot-apache` must be installed |
+| Traefik | Not applicable | Traefik contacts Let's Encrypt ACME directly using `certificatesResolvers.letsencrypt` in `traefik.yml` |
+
+With `--staging` flag: `--staging` is appended to the certbot command; test certificates issued by Let's Encrypt Staging CA (no rate limits).
+
+#### Post-certificate service verification
+
+| Web server | Distro | Command | Checks |
+|---|---|---|---|
+| Nginx | All | `sudo systemctl status nginx --no-pager` | Service active, no config errors |
+| Apache | Debian/Ubuntu | `sudo systemctl status apache2 --no-pager` | Service active |
+| Apache | Fedora/openSUSE | `sudo systemctl status httpd --no-pager` | Service active |
+| Traefik | All | `docker compose ps` | Container running |
+
+`CertbotManager.verify_service()` raises `ServerConfigError` if the service is not active after the certificate request.
 
 ---
 
-## 4. Decisiones de Diseño
+## 4. Design Decisions
 
-### DD-001: Patrón Provider (Strategy) para servidores web
+### DD-001: Provider (Strategy) pattern for web servers
 
-- **Decisión:** Usar una clase base abstracta `ServerProvider` con métodos `install()`, `configure()`, `verify()`, `remove()` que cada servidor implementa.
-- **Contexto:** Hay 3 servidores soportados con flujos similares pero implementaciones distintas. El código de orquestación es el mismo para todos.
-- **Alternativas evaluadas:**
+- **Decision:** Use an abstract base class `ServerProvider` with methods `install()`, `configure()`, `verify()`, `remove()` that each server implements.
+- **Context:** There are 3 supported servers with similar flows but different implementations. The orchestration code is the same for all.
+- **Evaluated alternatives:**
 
-| Opción | Pros | Contras |
+| Option | Pros | Cons |
 |---|---|---|
-| **Provider pattern / Strategy (elegida)** | Extensible sin modificar core; testeable por separado; código limpio | Requiere diseño previo de la interfaz |
-| Condicionales if/elif por servidor | Simple de implementar | Difícil de mantener; agregar servidor = modificar múltiples lugares |
-| Plugins dinámicos | Muy extensible | Over-engineering para 3 servidores |
+| **Provider pattern / Strategy (chosen)** | Extensible without modifying core; testable separately; clean code | Requires upfront interface design |
+| Conditionals if/elif per server | Simple to implement | Hard to maintain; adding server = modifying multiple places |
+| Dynamic plugins | Very extensible | Over-engineering for 3 servers |
 
-- **Justificación:** El patrón Provider/Strategy ofrece el balance correcto entre extensibilidad y simplicidad para el número de servidores previsto.
-- **Consecuencias:** Al agregar un nuevo servidor (ej: Caddy) basta con crear `providers/caddy.py` y registrarlo en `ProviderFactory`.
+- **Justification:** The Provider/Strategy pattern offers the right balance between extensibility and simplicity for the predicted number of servers.
+- **Consequences:** When adding a new server (e.g., Caddy) it is sufficient to create `providers/caddy.py` and register it in `ProviderFactory`.
 
-### DD-002: SystemRunner con sudo granular por comando
+### DD-002: SystemRunner with granular sudo per command
 
-- **Decisión:** `SystemRunner.run(cmd, sudo=False)` acepta un parámetro `sudo` que antepone `["sudo"]` a la lista de argumentos cuando es `True`. El usuario ejecuta el CLI como usuario normal; solo los comandos específicos que lo requieren se elevan.
-- **Contexto:** Las operaciones de instalación de paquetes, escritura en `/etc/` y reinicio de servicios requieren privilegios. Ejecutar todo el proceso como root es un anti-patrón de seguridad. Elvar el proceso completo con `sudo gen-cerbot` no es necesario ni deseable.
-- **Alternativas evaluadas:**
+- **Decision:** `SystemRunner.run(cmd, sudo=False)` accepts a `sudo` parameter that prepends `["sudo"]` to the argument list when `True`. The user runs the CLI as a normal user; only specific commands that require it are elevated.
+- **Context:** Package installation, writing to `/etc/`, and service restart require elevated privileges. Running the entire process as root is a security anti-pattern. Elevating the entire process with `sudo gen-cerbot` is unnecessary and undesirable.
+- **Evaluated alternatives:**
 
-| Opción | Pros | Contras |
+| Option | Pros | Cons |
 |---|---|---|
-| **sudo granular en SystemRunner (elegida)** | Principio de mínimo privilegio; usuario normal ejecuta el CLI; fácil de auditar qué comandos usan sudo | Requiere que el usuario tenga sudo configurado |
-| Ejecutar todo el CLI con sudo | Simple | Ejecuta como root todo el código Python (riesgo de seguridad); anti-patrón |
-| polkit / dbus para elevación | Sin requerir sudo en sudoers | Complejo, inconsistente entre distros |
+| **Granular sudo in SystemRunner (chosen)** | Principle of least privilege; normal user runs CLI; easy to audit which commands use sudo | Requires sudo to be configured for user |
+| Run entire CLI with sudo | Simple | Runs all Python code as root (security risk); anti-pattern |
+| polkit / dbus for elevation | Without requiring sudo in sudoers | Complex, inconsistent across distros |
 
-- **Justificación:** El parámetro `sudo=True` en `SystemRunner` es explícito, auditable en código y testeable con mocks sin necesitar permisos reales.
-- **Consecuencias:** Los tests unitarios mockean `SystemRunner` completo. Los tests de integración requieren que el usuario de CI tenga `sudo NOPASSWD`.
+- **Justification:** The `sudo=True` parameter in `SystemRunner` is explicit, auditable in code, and testable with mocks without needing real permissions.
+- **Consequences:** Unit tests mock entire `SystemRunner`. Integration tests require CI user to have `sudo NOPASSWD`.
 
-### DD-003: Typer como framework CLI
+### DD-003: Typer as CLI framework
 
-- **Decisión:** Usar [Typer](https://typer.tiangolo.com/) para definir el CLI en lugar de argparse o Click directamente.
-- **Alternativas evaluadas:**
+- **Decision:** Use [Typer](https://typer.tiangolo.com/) to define the CLI instead of argparse or Click directly.
+- **Evaluated alternatives:**
 
-| Opción | Pros | Contras |
+| Option | Pros | Cons |
 |---|---|---|
-| **Typer (elegida)** | Type hints nativos; autocompletado; rich output; basado en Click | Dependencia adicional |
-| argparse | stdlib, sin deps | Verbose; sin type hints nativos |
-| Click | Maduro, muy usado | Más boilerplate que Typer |
+| **Typer (chosen)** | Native type hints; autocompletion; rich output; built on Click | Additional dependency |
+| argparse | stdlib, no deps | Verbose; no native type hints |
+| Click | Mature, widely used | More boilerplate than Typer |
 
-- **Justificación:** Typer reduce el boilerplate de CLI y permite aprovechar las anotaciones de tipo Python ya usadas en el resto del código.
+- **Justification:** Typer reduces CLI boilerplate and lets us leverage Python type annotations already used in the rest of the code.
 
-### DD-004: Plantillas Jinja2 para archivos de configuración
+### DD-004: Jinja2 templates for configuration files
 
-- **Decisión:** Los archivos de configuración de servidores web se generan desde plantillas Jinja2 en `src/gen_cerbot/templates/`, no hardcodeados en Python.
-- **Justificación:** Separa el contenido de la configuración del código Python; facilita la revisión, modificación y testing de las plantillas; permite que usuarios avanzados las customicen.
+- **Decision:** Web server configuration files are generated from Jinja2 templates in `src/gen_cerbot/templates/`, not hardcoded in Python.
+- **Justification:** Separates configuration content from Python code; facilitates template review, modification, and testing; allows advanced users to customize them.
 
-### DD-005: Registro local JSON para certificados gestionados
+### DD-005: Local JSON registry for managed certificates
 
-- **Decisión:** Mantener un archivo JSON local (en `~/.config/gen_cerbot/registry.json`) que registra los certificados creados por la herramienta.
-- **Justificación:** Certbot no expone fácilmente metadatos sobre el servidor web asociado a cada certificado. El registro local permite al comando `list` mostrar información enriquecida (servidor, proyecto, puerto).
-- **Consecuencias:** El registro puede desincronizarse si el usuario manipula Certbot directamente. El comando `list` consulta tanto el registro local como el estado real de Certbot para reconciliar.
+- **Decision:** Maintain a local JSON file (in `~/.config/gen_cerbot/registry.json`) that registers certificates created by the tool.
+- **Justification:** Certbot does not easily expose metadata about the web server associated with each certificate. The local registry allows the `list` command to show enriched information (server, project, port).
+- **Consequences:** The registry can fall out of sync if the user manipulates Certbot directly. The `list` command queries both the local registry and Certbot's actual state to reconcile.
 
-### DD-006: Patrón Strategy para gestores de paquetes (PackageManager)
+### DD-006: Strategy pattern for package managers (PackageManager)
 
-- **Decisión:** Usar una clase base abstracta `PackageManager` con métodos `install(packages)`, `update()`, `is_installed(package)`, e implementaciones concretas `AptPackageManager`, `DnfPackageManager` y `ZypperPackageManager`. Un `PackageManagerFactory` construye la instancia correcta a partir del `DistroFamily` detectado.
-- **Contexto:** La instalación de paquetes es fundamentalmente diferente entre familias de distribuciones. Los comandos, flags, nombres de paquetes y comportamientos varían. El código de los Providers no debe conocer en qué distro está corriendo.
-- **Alternativas evaluadas:**
+- **Decision:** Use an abstract base class `PackageManager` with methods `install(packages)`, `update()`, `is_installed(package)`, and concrete implementations `AptPackageManager`, `DnfPackageManager`, and `ZypperPackageManager`. A `PackageManagerFactory` constructs the correct instance from the detected `DistroFamily`.
+- **Context:** Package installation is fundamentally different between distro families. Commands, flags, package names, and behaviors vary. Provider code must not know which distro it is running on.
+- **Evaluated alternatives:**
 
-| Opción | Pros | Contras |
+| Option | Pros | Cons |
 |---|---|---|
-| **PackageManager Strategy + DistroDetector (elegida)** | Providers agnósticos de distro; extensible; testeable por separado | Requiere mapeo de nombres de paquetes por distro |
-| Condicionales en cada Provider | Simple | Duplicación masiva; agregar distro = modificar todos los Providers |
-| Ansible como gestor | Declarativo, multi-distro nativo | Dependencia externa muy pesada; requiere Python en target |
-| `distro` package de PyPI | Detección de distro robusta | No resuelve la abstracción del gestor; usar junto a la Strategy |
+| **PackageManager Strategy + DistroDetector (chosen)** | Providers distro-agnostic; extensible; testable separately | Requires package name mapping per distro |
+| Conditionals in each Provider | Simple | Massive duplication; adding distro = modifying all Providers |
+| Ansible as manager | Declarative, multi-distro native | Very heavy external dependency; requires Python on target |
+| `distro` package from PyPI | Robust distro detection | Does not solve manager abstraction; use alongside Strategy |
 
-- **Justificación:** El mismo patrón Provider/Strategy ya probado para servidores web se aplica aquí de forma consistente, manteniendo la arquitectura coherente.
-- **Consecuencias:** Los nombres de paquetes varían por distro (ej: `python3-certbot-nginx` en Debian vs `certbot` en Fedora). El mapeo de paquetes vive en cada implementación de `PackageManager`, no en los Providers.
+- **Justification:** The same Provider/Strategy pattern already proven for web servers is applied here consistently, keeping the architecture coherent.
+- **Consequences:** Package names vary per distro (e.g., `python3-certbot-nginx` on Debian vs `certbot` on Fedora). Package name mapping lives in each `PackageManager` implementation, not in Providers.
 
-### DD-007: questionary como librería para el modo interactivo
+### DD-007: questionary library for interactive mode
 
-- **Decisión:** Usar [`questionary`](https://questionary.readthedocs.io/) para los prompts interactivos del menú y el asistente guiado, combinado con `rich` (ya incluido como dependencia transitiva de Typer) para la salida en tiempo real.
-- **Contexto:** El modo interactivo requiere: selección con flechas de teclado, campos de texto con validación en línea, pantalla de confirmación y streaming de salida de ejecución. La librería debe ser liviana, compatible con la arquitectura Typer/rich existente y testeable con mocks.
-- **Alternativas evaluadas:**
+- **Decision:** Use [`questionary`](https://questionary.readthedocs.io/) for interactive prompts in the menu and guided assistant, combined with `rich` (already included as transitive dependency of Typer) for real-time output.
+- **Context:** Interactive mode requires: keyboard arrow selection, text fields with inline validation, confirmation screen, and streaming execution output. The library must be lightweight, compatible with the existing Typer/rich architecture, and testable with mocks.
+- **Evaluated alternatives:**
 
-| Opción | Pros | Contras |
+| Option | Pros | Cons |
 |---|---|---|
-| **questionary (elegida)** | Liviana; API limpia; built on prompt_toolkit; testeable con `KeyboardInterrupt` mock; compatible con rich | Dependencia adicional |
-| InquirerPy | Más features (checkbox, fuzzy search) | Más pesada; overkill para el caso de uso |
-| prompt_toolkit directo | Máximo control | API muy verbose; requiere mucho boilerplate |
-| curses (stdlib) | Sin dependencias | API arcaica; difícil de testear; no portátil |
-| click.prompt (via Typer) | Ya incluido | Solo text prompts; no soporta menús de selección navegables |
+| **questionary (chosen)** | Lightweight; clean API; built on prompt_toolkit; testable with `KeyboardInterrupt` mock; compatible with rich | Additional dependency |
+| InquirerPy | More features (checkbox, fuzzy search) | Heavier; overkill for use case |
+| prompt_toolkit directly | Maximum control | Very verbose API; requires lots of boilerplate |
+| curses (stdlib) | No dependencies | Archaic API; difficult to test; not portable |
+| click.prompt (via Typer) | Already included | Text prompts only; no navigable selection menus |
 
-- **Justificación:** `questionary` provee exactamente los tipos de prompt necesarios (`select`, `text`, `confirm`) con la API más limpia del ecosistema. Pesa menos de 50 KB y no duplica funcionalidad de `rich`. Su integración con `prompt_toolkit` permite un comportamiento consistente en todos los terminales soportados.
-- **Consecuencias:** Se añade `questionary>=2.0` a `pyproject.toml`. Los tests del modo interactivo usan `questionary`'s `unsafe_ask()` con fixtures de respuestas predefinidas para evitar input interactivo real.
+- **Justification:** `questionary` provides exactly the prompt types needed (`select`, `text`, `confirm`) with the cleanest API in the ecosystem. It weighs less than 50 KB and does not duplicate `rich` functionality. Its integration with `prompt_toolkit` enables consistent behavior across all supported terminals.
+- **Consequences:** Add `questionary>=2.0` to `pyproject.toml`. Interactive mode tests use `questionary`'s `unsafe_ask()` with fixtures of predefined answers to avoid real interactive input.
 
-### DD-009: JSON locale files para el sistema i18n
+### DD-009: JSON locale files for i18n system
 
-- **Decisión:** Implementar i18n mediante archivos JSON planos por idioma (`en.json`, `es.json`) cargados por un `LocaleManager` ligero, en lugar de usar `gettext`/`babel` o librerías de terceros.
-- **Contexto:** La interfaz interactiva tiene un conjunto acotado y estático de cadenas de texto (menú, asistente, confirmaciones, errores). Se necesita: cambio de idioma en tiempo de ejecución, fallback a inglés si una clave falta, y que sea fácil de extender con nuevos idiomas.
-- **Alternativas evaluadas:**
+- **Decision:** Implement i18n using plain JSON files per language (`en.json`, `es.json`) loaded by a lightweight `LocaleManager`, instead of `gettext`/`babel` or third-party libraries.
+- **Context:** The interactive interface has a bounded and static set of text strings (menu, assistant, confirmations, errors). Needed: runtime language switching, fallback to English if key is missing, and ease of extension with new languages.
+- **Evaluated alternatives:**
 
-| Opción | Pros | Contras |
+| Option | Pros | Cons |
 |---|---|---|
-| **JSON locales + LocaleManager (elegida)** | Sin dependencias extra; editable directamente; fácil de extender; carga en memoria O(1) | No soporta plurales complejos ni formatos de fecha/número |
-| gettext / babel | Estándar de facto en Python; soporta plurales | Requiere compilar .po → .mo; setup complejo; overkill para el caso de uso |
-| python-i18n (PyPI) | API fluida; soporta YAML/JSON | Dependencia extra; más de lo necesario |
-| fluent (Mozilla) | Moderno; soporta plurales y géneros | API no-estándar; muy poca adopción en Python CLI |
+| **JSON locales + LocaleManager (chosen)** | No extra dependencies; directly editable; easy to extend; O(1) memory load | No support for complex plurals or date/number formats |
+| gettext / babel | De facto standard in Python; supports plurals | Requires compiling .po → .mo; complex setup; overkill for use case |
+| python-i18n (PyPI) | Fluent API; supports YAML/JSON | Extra dependency; more than needed |
+| fluent (Mozilla) | Modern; supports plurals and gender | Non-standard API; minimal Python adoption |
 
-- **Justificación:** El conjunto de cadenas es estático y pequeño (< 100 claves). JSON es legible y editable sin herramientas especiales. La lógica de `LocaleManager.t("key")` cabe en < 30 líneas. Si en el futuro se necesitan plurales o formatos, se puede migrar a `babel` sin cambiar la interfaz pública (`t("key")`).
-- **Consecuencias:** Se añade el módulo `i18n/` con `locale_manager.py`, `selector.py` y `locales/{en,es}.json`. Se agrega el flag global `--lang <code>` al entry point. La preferencia de idioma se almacena en `~/.config/gen_cerbot/config.toml` (misma ruta que el registro de certs). Todos los textos hardcoded de `interactive/` se reemplazan por llamadas a `LocaleManager.t("clave")`.
+- **Justification:** The string set is static and small (< 100 keys). JSON is readable and editable without special tools. The `LocaleManager.t("key")` logic fits in < 30 lines. If plurals or formats are needed in the future, migration to `babel` is possible without changing the public interface (`t("key")`).
+- **Consequences:** Add `i18n/` module with `locale_manager.py`, `selector.py`, and `locales/{en,es}.json`. Add global `--lang <code>` flag to entry point. Language preference stored in `~/.config/gen_cerbot/config.toml` (same path as cert registry). All hardcoded text in `interactive/` replaced with `LocaleManager.t("key")` calls.
 
-### DD-008: `LiveOutputRenderer` con `rich.live` para salida en tiempo real
+### DD-008: `LiveOutputRenderer` with `rich.live` for real-time output
 
-- **Decisión:** Usar `rich.live.Live` con un panel actualizable para mostrar el progreso de ejecución paso a paso, en lugar de imprimir línea a línea con `print()`.
-- **Contexto:** Los pasos de instalación y configuración pueden tardar segundos. El usuario necesita feedback visual inmediato de qué está pasando, con indicadores de estado (`[✔]`, `[→]`, `[✗]`) y los comandos `sudo` ejecutados.
-- **Alternativas evaluadas:**
+- **Decision:** Use `rich.live.Live` with an updatable panel to show execution progress step-by-step, instead of line-by-line printing with `print()`.
+- **Context:** Installation and configuration steps can take seconds. Users need immediate visual feedback on what is happening, with status indicators (`[✔]`, `[→]`, `[✗]`) and executed `sudo` commands.
+- **Evaluated alternatives:**
 
-| Opción | Pros | Contras |
+| Option | Pros | Cons |
 |---|---|---|
-| **rich.live + panel (elegida)** | Actualización in-place sin scroll; indicadores de spinner; ya es dependencia | Requiere contexto `with Live()` |
-| print() línea a línea | Simple; testeable | Sin indicadores de progreso; output roto si hay caracteres ANSI |
-| tqdm | Barras de progreso | No aplica bien a pasos cualitativos de duración variable |
+| **rich.live + panel (chosen)** | In-place updates without scrolling; spinner indicators; already a dependency | Requires `with Live()` context |
+| print() line by line | Simple; testable | No progress indicators; output broken if ANSI characters present |
+| tqdm | Progress bars | Does not apply well to qualitative steps of variable duration |
 
-- **Justificación:** `rich` ya es dependencia (via Typer[all]). `rich.live` permite mostrar un panel que se actualiza en el lugar sin hacer scroll, lo que da feedback visual limpio.
-- **Consecuencias:** `LiveOutputRenderer` captura el `stdout` de `SystemRunner` paso a paso y lo feed a `rich.live`. Los tests de `LiveOutputRenderer` capturan el output con `rich.Console(file=io.StringIO())`.
+- **Justification:** `rich` is already a dependency (via Typer[all]). `rich.live` allows showing a panel that updates in place without scrolling, giving clean visual feedback.
+- **Consequences:** `LiveOutputRenderer` captures `SystemRunner` stdout step by step and feeds it to `rich.live`. Tests of `LiveOutputRenderer` capture output with `rich.Console(file=io.StringIO())`.
 
 ---
 
-## 5. Modelos de Datos
+## 5. Data Models
 
 ### CertificateConfig
 
@@ -409,36 +450,36 @@ class ServerType(str, Enum):
 class CertificateConfig(BaseModel):
     domain: str                           # "sub.example.com"
     server_type: ServerType               # nginx | apache | traefik
-    backend_port: int = 8000              # Puerto del servicio dockerizado
-    project_name: str                     # Nombre para archivos de config
-    email: str                            # Email para Let's Encrypt
+    backend_port: int = 8000              # Port of dockerized service
+    project_name: str                     # Name for config files
+    email: str                            # Email for Let's Encrypt
     pkg_family: PkgFamily | None = None   # deb | rpm | None → auto-detect
-    staging: bool = False                 # Usar CA de staging de Let's Encrypt
-    skip_dns_check: bool = False          # Omitir validación DNS
-    dry_run: bool = False                 # No aplicar cambios reales
-    extra_domains: list[str] = []         # Dominios adicionales (SAN)
-    interactive: bool = True              # True = mostrar output via LiveOutputRenderer
-    lang: str = "en"                      # Código de idioma activo (en | es | ...)
+    staging: bool = False                 # Use Let's Encrypt staging CA
+    skip_dns_check: bool = False          # Skip DNS validation
+    dry_run: bool = False                 # Do not apply real changes
+    extra_domains: list[str] = []         # Additional domains (SAN)
+    interactive: bool = True              # True = show output via LiveOutputRenderer
+    lang: str = "en"                      # Active language code (en | es | ...)
 ```
 
-### Language enum y LocaleManager
+### Language enum and LocaleManager
 
 ```python
 class SupportedLang(str, Enum):
     EN = "en"   # English (default)
-    ES = "es"   # Español
+    ES = "es"   # Spanish
 
 class LocaleManager:
-    """Carga el JSON del idioma activo y resuelve claves con fallback a 'en'."""
+    """Loads active language JSON and resolves keys with fallback to 'en'."""
     _instance: "LocaleManager | None" = None
     _translations: dict[str, str] = {}
-    _fallback: dict[str, str] = {}       # siempre en.json
+    _fallback: dict[str, str] = {}       # always en.json
 
     def set_lang(self, lang: str) -> None: ...
-    def t(self, key: str, **kwargs: str) -> str: ...   # kwargs para interpolación
+    def t(self, key: str, **kwargs: str) -> str: ...   # kwargs for interpolation
 ```
 
-Ejemplo de estructura de `locales/en.json`:
+Example structure of `locales/en.json`:
 
 ```json
 {
@@ -468,7 +509,7 @@ Ejemplo de estructura de `locales/en.json`:
 }
 ```
 
-### CertificateRecord (registro local)
+### CertificateRecord (local registry)
 
 ```python
 class CertificateRecord(BaseModel):
@@ -478,23 +519,23 @@ class CertificateRecord(BaseModel):
     backend_port: int | None
     email: str
     created_at: str                 # ISO-8601
-    config_path: str                # Ruta al archivo de config generado
-    cert_name: str                  # Nombre del cert en Certbot
+    config_path: str                # Path to generated config file
+    cert_name: str                  # Certificate name in Certbot
 ```
 
-### DistroFamily y PackageManager
+### DistroFamily and PackageManager
 
 ```python
 class PkgFamily(str, Enum):
-    """Selección explícita del usuario (interactivo) o derivada de DistroFamily (auto-detect)."""
+    """Explicit user selection (interactive) or derived from DistroFamily (auto-detect)."""
     DEB = "deb"   # Debian / Ubuntu → AptPackageManager
     RPM = "rpm"   # Fedora → DnfPackageManager; openSUSE → ZypperPackageManager
 
 class DistroFamily(str, Enum):
-    DEBIAN = "debian"    # Ubuntu, Debian → usa apt-get
-    REDHAT = "redhat"    # Fedora, RHEL, CentOS → usa dnf
-    SUSE   = "suse"      # openSUSE Leap, Tumbleweed → usa zypper
-    UNKNOWN = "unknown"  # → lanza UnsupportedDistroError
+    DEBIAN = "debian"    # Ubuntu, Debian → uses apt-get
+    REDHAT = "redhat"    # Fedora, RHEL, CentOS → uses dnf
+    SUSE   = "suse"      # openSUSE Leap, Tumbleweed → uses zypper
+    UNKNOWN = "unknown"  # → raises UnsupportedDistroError
 
 class PackageManager(ABC):
     def __init__(self, runner: SystemRunner): ...
@@ -503,7 +544,7 @@ class PackageManager(ABC):
     @abstractmethod
     def update(self) -> None: ...                          # sudo <mgr> update/upgrade
     @abstractmethod
-    def is_installed(self, package: str) -> bool: ...      # sin sudo
+    def is_installed(self, package: str) -> bool: ...      # no sudo
 
 class AptPackageManager(PackageManager):
     """sudo apt-get install -y {packages}"""
@@ -515,51 +556,51 @@ class ZypperPackageManager(PackageManager):
     """sudo zypper install -y {packages}"""
 ```
 
-### Mapeo de nombres de paquetes por distro
+### Package name mapping by distro
 
-| Paquete lógico | Debian/Ubuntu | Fedora | openSUSE |
+| Logical package | Debian/Ubuntu | Fedora | openSUSE |
 |---|---|---|---|
-| Servidor Nginx | `nginx` | `nginx` | `nginx` |
-| Servidor Apache | `apache2` | `httpd` | `apache2` |
-| Plugin proxy Apache | `libapache2-mod-proxy-html` | `mod_proxy` (incluido) | `apache2-mod_proxy` |
+| Nginx Server | `nginx` | `nginx` | `nginx` |
+| Apache Server | `apache2` | `httpd` | `apache2` |
+| Apache proxy plugin | `libapache2-mod-proxy-html` | `mod_proxy` (included) | `apache2-mod_proxy` |
 | Certbot base | (snap) | `certbot` | `certbot` |
-| Plugin Certbot Nginx | `python3-certbot-nginx` | `python3-certbot-nginx` | `python3-certbot-nginx` |
-| Plugin Certbot Apache | `python3-certbot-apache` | `python3-certbot-apache` | `python3-certbot-apache` |
+| Certbot Nginx plugin | `python3-certbot-nginx` | `python3-certbot-nginx` | `python3-certbot-nginx` |
+| Certbot Apache plugin | `python3-certbot-apache` | `python3-certbot-apache` | `python3-certbot-apache` |
 
-### Jerarquía de Excepciones
+### Exception Hierarchy
 
 ```python
 class GenCerbotError(Exception): ...              # Base
-class DNSValidationError(GenCerbotError): ...     # Dominio no resuelve → mensaje accionable
-class CertbotError(GenCerbotError): ...           # Error de Certbot → incluye output raw
-class ServerConfigError(GenCerbotError): ...      # Error en config del servidor
-class SystemCommandError(GenCerbotError): ...     # Fallo de subprocess → incluye exit code y cmd
-class DependencyError(GenCerbotError): ...        # Dependencia faltante (Docker, snapd)
-class UnsupportedDistroError(GenCerbotError): ... # Distro no reconocida en /etc/os-release
-class SudoError(GenCerbotError): ...              # sudo no disponible o comando denegado
+class DNSValidationError(GenCerbotError): ...     # Domain doesn't resolve → actionable message
+class CertbotError(GenCerbotError): ...           # Certbot error → includes raw output
+class ServerConfigError(GenCerbotError): ...      # Server config error
+class SystemCommandError(GenCerbotError): ...     # subprocess failure → includes exit code and cmd
+class DependencyError(GenCerbotError): ...        # Missing dependency (Docker, snapd)
+class UnsupportedDistroError(GenCerbotError): ... # Distro not recognized in /etc/os-release
+class SudoError(GenCerbotError): ...              # sudo unavailable or command denied
 ```
 
 ---
 
-## 6. Seguridad
+## 6. Security
 
-| Vector | Mitigación |
+| Vector | Mitigation |
 |---|---|
-| Ejecución como root | CLI detecta `EUID == 0` y aborta con mensaje explicativo |
-| Escalación de privilegios | `sudo` se antepone solo a comandos específicos y predefinidos en `SystemRunner`; nunca a strings construidos desde input del usuario |
-| Inyección en comandos del sistema | Los argumentos del usuario (domain, project_name) se pasan como lista de strings a `subprocess.run`, nunca como `shell=True` |
-| Permisos de `acme.json` (Traefik) | Se genera con `os.chmod(path, 0o600)` explícitamente |
-| Claves privadas en logs | `SystemRunner` filtra líneas que contienen patrones de claves antes de loguear |
-| Inyección en templates | Jinja2 con `autoescape=False` solo para archivos de config, nunca para HTML |
-| Email en logs | El email del usuario nunca se loguea a nivel DEBUG ni superior |
+| Execution as root | CLI detects `EUID == 0` and aborts with explanatory message |
+| Privilege escalation | `sudo` prepended only to specific, predefined commands in `SystemRunner`; never to strings built from user input |
+| System command injection | User arguments (domain, project_name) passed as string list to `subprocess.run`, never with `shell=True` |
+| Permissions on `acme.json` (Traefik) | Generated with `os.chmod(path, 0o600)` explicitly |
+| Private keys in logs | `SystemRunner` filters lines containing key patterns before logging |
+| Template injection | Jinja2 with `autoescape=False` only for config files, never for HTML |
+| Email in logs | User email never logged at DEBUG level or higher |
 
 ---
 
-## 7. Observabilidad
+## 7. Observability
 
 ### Logging
 
-La herramienta usa el módulo `logging` estándar de Python. Los logs se escriben a `~/.local/share/gen_cerbot/gen_cerbot.log` con rotación de 7 días.
+The tool uses Python's standard `logging` module. Logs are written to `~/.local/share/gen_cerbot/gen_cerbot.log` with 7-day rotation.
 
 ```
 [2026-03-31T14:30:00Z] [INFO]  Starting generate for domain=sub.example.com server=nginx
@@ -577,149 +618,149 @@ La herramienta usa el módulo `logging` estándar de Python. Los logs se escribe
 [2026-03-31T14:30:45Z] [INFO]  Registry updated: sub.example.com registered
 ```
 
-### Salida de consola (stdout)
+### Console output (stdout)
 
-- `[INFO]` en verde
-- `[WARN]` en amarillo
-- `[ERROR]` en rojo
-- Progreso con spinners (via `rich` o `typer` progress)
+- `[INFO]` in green
+- `[WARN]` in yellow
+- `[ERROR]` in red
+- Progress with spinners (via `rich` or `typer` progress)
 
 ---
 
-## 8. Estrategia de Testing
+## 8. Testing Strategy
 
-### 8.1 Pirámide de Tests
+### 8.1 Test Pyramid
 
 ```
          ▲
-        /E2E\          Manual / VM  — happy paths en Ubuntu, Fedora, openSUSE
-       /──────\         (Fase 6, Let's Encrypt --staging)
-      /  Integ \        pytest + tmp_path — flujos críticos sin red ni sudo real
+        /E2E\          Manual / VM  — happy paths on Ubuntu, Fedora, openSUSE
+       /──────\         (Phase 6, Let's Encrypt --staging)
+      /  Integ \        pytest + tmp_path — critical flows without network or real sudo
      /──────────\
-    /    Unit    \      pytest + unittest.mock — lógica de negocio aislada
-   ──────────────────
+    /    Unit    \      pytest + unittest.mock — isolated business logic
+   ──────────────
 ```
 
-| Nivel | Target cobertura | Entorno | Herramientas principales |
+| Level | Coverage target | Environment | Main tools |
 |---|---|---|---|
-| **Unit** | > 85% por módulo | CI / local | `pytest`, `unittest.mock`, `pytest-mock` |
-| **Integración** | Flujos críticos (10 escenarios mínimo) | CI / local | `pytest`, `tmp_path`, fixtures estáticas |
-| **E2E / Manual** | Happy paths en 3 distros | VM limpia | Entorno real + `--staging` de Let's Encrypt |
+| **Unit** | > 85% per module | CI / local | `pytest`, `unittest.mock`, `pytest-mock` |
+| **Integration** | Critical flows (10 minimum scenarios) | CI / local | `pytest`, `tmp_path`, static fixtures |
+| **E2E / Manual** | Happy paths on 3 distros | Clean VM | Real environment + Let's Encrypt `--staging` |
 
-### 8.2 Estructura de Directorios de Tests
+### 8.2 Test Directory Structure
 
 ```
 tests/
-├── conftest.py                     # Fixtures globales: runner_mock, pkg_manager_mock, tmp_config
+├── conftest.py                     # Global fixtures: runner_mock, pkg_manager_mock, tmp_config
 ├── unit/
-│   ├── test_system_runner.py       # SystemRunner: sudo, sin sudo, error de subprocess
-│   ├── test_distro_detector.py     # DistroDetector: 3 distros + desconocida
+│   ├── test_system_runner.py       # SystemRunner: sudo, no sudo, subprocess error
+│   ├── test_distro_detector.py     # DistroDetector: 3 distros + unknown
 │   ├── test_package_manager.py     # Apt/Dnf/Zypper: install, is_installed, update
-│   ├── test_dns_validator.py       # DNSValidator: ok, fallo, skip_dns_check
-│   ├── test_cert_registry.py       # CertRegistry: add, list, remove, idempotencia
-│   ├── test_template_renderer.py   # TemplateRenderer: nginx, apache por distro, traefik
+│   ├── test_dns_validator.py       # DNSValidator: ok, fail, skip_dns_check
+│   ├── test_cert_registry.py       # CertRegistry: add, list, remove, idempotence
+│   ├── test_template_renderer.py   # TemplateRenderer: nginx, apache per distro, traefik
 │   ├── test_nginx_provider.py      # NginxProvider: install, configure, verify, remove
 │   ├── test_apache_provider.py     # ApacheProvider: 3 DistroFamily
-│   ├── test_traefik_provider.py    # TraefikProvider: generación de compose + acme.json
+│   ├── test_traefik_provider.py    # TraefikProvider: compose + acme.json generation
 │   ├── test_certbot_installer.py   # CertbotInstaller: snap, dnf, zypper
 │   ├── test_certbot_manager.py     # CertbotManager: certonly, renew, revoke, list
-│   ├── test_certbot_service.py     # CertbotService: flujo generate, list, renew, remove
-│   ├── test_cli.py                 # CLI Typer: CliRunner por subcomando
+│   ├── test_certbot_service.py     # CertbotService: generate, list, renew, remove flow
+│   ├── test_cli.py                 # CLI Typer: CliRunner per subcommand
 │   ├── interactive/
-│   │   ├── test_wizard.py          # GenerateWizard: campos, validación, resumen
-│   │   ├── test_menu.py            # InteractiveMenu: routing de opciones
-│   │   └── test_output.py          # LiveOutputRenderer: indicadores [✔]/[→]/[✗]
+│   │   ├── test_wizard.py          # GenerateWizard: fields, validation, summary
+│   │   ├── test_menu.py            # InteractiveMenu: option routing
+│   │   └── test_output.py          # LiveOutputRenderer: [✔]/[→]/[✗] indicators
 │   └── i18n/
-│       ├── test_locale_manager.py  # LocaleManager: t(), fallback, interpolación
-│       └── test_language_selector.py # LanguageSelector: prompt, persistencia, --lang
+│       ├── test_locale_manager.py  # LocaleManager: t(), fallback, interpolation
+│       └── test_language_selector.py # LanguageSelector: prompt, persistence, --lang
 ├── integration/
-│   ├── test_nginx_config_gen.py    # Genera archivo nginx en tmp_path y valida contenido
-│   ├── test_apache_config_gen.py   # Genera VirtualHost Apache por distro en tmp_path
-│   ├── test_traefik_config_gen.py  # Genera docker-compose.yml + traefik.yml en tmp_path
-│   ├── test_certbot_output.py      # Parseo de salida real de `certbot certificates`
-│   ├── test_cert_registry_io.py    # Lectura/escritura del JSON registry en disco real
-│   └── test_full_flow.py           # CertbotService end-to-end con todos los deps mockeados
+│   ├── test_nginx_config_gen.py    # Generates nginx file in tmp_path and validates content
+│   ├── test_apache_config_gen.py   # Generates Apache VirtualHost per distro in tmp_path
+│   ├── test_traefik_config_gen.py  # Generates docker-compose.yml + traefik.yml in tmp_path
+│   ├── test_certbot_output.py      # Parsing real `certbot certificates` output
+│   ├── test_cert_registry_io.py    # Reading/writing registry JSON on real disk
+│   └── test_full_flow.py           # CertbotService end-to-end with all deps mocked
 └── fixtures/
     ├── os-release/
-    │   ├── ubuntu-22.04            # Contenido de /etc/os-release en Ubuntu 22.04
-    │   ├── debian-12               # Contenido de /etc/os-release en Debian 12
-    │   ├── fedora-40               # Contenido de /etc/os-release en Fedora 40
-    │   ├── opensuse-leap-15.5      # Contenido de /etc/os-release en openSUSE Leap
-    │   └── unknown-distro          # Distro sin ID conocido (para UnsupportedDistroError)
+    │   ├── ubuntu-22.04            # /etc/os-release content for Ubuntu 22.04
+    │   ├── debian-12               # /etc/os-release content for Debian 12
+    │   ├── fedora-40               # /etc/os-release content for Fedora 40
+    │   ├── opensuse-leap-15.5      # /etc/os-release content for openSUSE Leap
+    │   └── unknown-distro          # Distro with unknown ID (for UnsupportedDistroError)
     ├── certbot-outputs/
-    │   ├── certificates_ok.txt     # Salida de `certbot certificates` con 2 certs
-    │   ├── certificates_empty.txt  # Salida con "No certificates found"
-    │   └── certonly_success.txt    # Salida de `certbot certonly --nginx` exitoso
+    │   ├── certificates_ok.txt     # Output of `certbot certificates` with 2 certs
+    │   ├── certificates_empty.txt  # Output with "No certificates found"
+    │   └── certonly_success.txt    # Output of `certbot certonly --nginx` success
     └── templates-rendered/
-        ├── nginx-site-expected.conf        # Config Nginx esperada para comparar
-        ├── apache-debian-expected.conf     # VirtualHost Apache Debian esperado
-        ├── apache-redhat-expected.conf     # VirtualHost Apache Fedora esperado
-        └── traefik-compose-expected.yml    # docker-compose.yml Traefik esperado
+        ├── nginx-site-expected.conf        # Expected Nginx config for comparison
+        ├── apache-debian-expected.conf     # Expected Apache VirtualHost for Debian
+        ├── apache-redhat-expected.conf     # Expected Apache VirtualHost for Fedora
+        └── traefik-compose-expected.yml    # Expected docker-compose.yml for Traefik
 ```
 
-### 8.3 Fixtures Globales (`conftest.py`)
+### 8.3 Global Fixtures (`conftest.py`)
 
 ```python
 @pytest.fixture
 def mock_runner(mocker):
-    """SystemRunner con subprocess.run mockeado — no ejecuta comandos reales."""
+    """SystemRunner with subprocess.run mocked — does not execute real commands."""
     runner = MagicMock(spec=SystemRunner)
     runner.run.return_value = CompletedProcess(args=[], returncode=0, stdout="", stderr="")
     return runner
 
 @pytest.fixture
 def mock_apt(mock_runner):
-    """AptPackageManager inyectado con runner mockeado."""
+    """AptPackageManager injected with mocked runner."""
     return AptPackageManager(runner=mock_runner)
 
 @pytest.fixture
 def mock_dnf(mock_runner):
-    """DnfPackageManager inyectado con runner mockeado."""
+    """DnfPackageManager injected with mocked runner."""
     return DnfPackageManager(runner=mock_runner)
 
 @pytest.fixture
 def tmp_config(tmp_path):
-    """Directorio de configuración temporal para CertRegistry y LocaleManager."""
+    """Temporary configuration directory for CertRegistry and LocaleManager."""
     config_dir = tmp_path / ".config" / "gen_cerbot"
     config_dir.mkdir(parents=True)
     return config_dir
 
 @pytest.fixture
 def ubuntu_os_release(tmp_path):
-    """Archivo /etc/os-release para Ubuntu 22.04 en directorio temporal."""
+    """/etc/os-release file for Ubuntu 22.04 in temporary directory."""
     content = Path("tests/fixtures/os-release/ubuntu-22.04").read_text()
     f = tmp_path / "os-release"
     f.write_text(content)
     return f
 ```
 
-### 8.4 Estrategia de Mocking por Módulo
+### 8.4 Mocking Strategy per Module
 
-| Módulo | Dependencia que se mockea | Método de mock | Qué se verifica |
+| Module | Mocked dependency | Mock method | What is verified |
 |---|---|---|---|
-| `SystemRunner` | `subprocess.run` | `unittest.mock.patch` | cmd construida, sudo prepended, returncode != 0 → `SystemCommandError` |
-| `DistroDetector` | `/etc/os-release` | `tmp_path` + fixture file | DistroFamily correcto para Ubuntu/Fedora/openSUSE/unknown |
-| `AptPackageManager` | `SystemRunner` | `MagicMock(spec=SystemRunner)` | cmd incluye `apt-get install -y` + lista de paquetes |
-| `DnfPackageManager` | `SystemRunner` | `MagicMock(spec=SystemRunner)` | cmd incluye `dnf install -y` + lista de paquetes |
-| `ZypperPackageManager` | `SystemRunner` | `MagicMock(spec=SystemRunner)` | cmd incluye `zypper install -y` + lista de paquetes |
-| `NginxProvider` | `PackageManager`, `SystemRunner` | `MagicMock` | `install()` llama `pkg_manager.install(["nginx", ...])`; `verify()` usa `sudo=True` |
-| `ApacheProvider` | `PackageManager`, `SystemRunner`, `DistroFamily` | `MagicMock` | nombre de paquete varía por `DistroFamily` (apache2 / httpd); template correcto |
-| `TraefikProvider` | `SystemRunner`, `tmp_path` | `MagicMock` + `tmp_path` | archivos generados existen; `acme.json` con permisos 600 |
-| `DNSValidator` | `socket.getaddrinfo` | `unittest.mock.patch("socket.getaddrinfo")` | IP coincide → OK; no coincide → `DNSValidationError` con mensaje |
-| `CertbotManager` | `SystemRunner` | `MagicMock` | cmd de `certonly` incluye `--nginx`/`--apache`; `certificates` parsea fixture |
-| `CertbotInstaller` | `SystemRunner`, `DistroFamily` | `MagicMock` | instala via snap para Debian, dnf para Fedora, zypper para SUSE |
-| `CertbotService` | todos los anteriores | múltiples `MagicMock` + `patch` | secuencia de llamadas correcta; propagación de excepciones |
-| `GenerateWizard` | `questionary` | `mocker.patch("questionary.text.ask")` + `unsafe_ask` | campos con valores predefinidos; validación rechaza emails inválidos |
-| `LiveOutputRenderer` | `rich.Console` | `rich.Console(file=io.StringIO())` | output contiene `[✔]` al completar; `[✗]` al fallar |
-| `LocaleManager` | archivos `locales/*.json` | `tmp_path` con JSON custom | `t("clave")` retorna texto correcto; clave inexistente → fallback inglés |
-| `LanguageSelector` | `questionary`, `config.toml` | `mocker.patch` + `tmp_config` fixture | persiste lang en TOML; segunda llamada no muestra prompt |
-| CLI (Typer) | `CertbotService` | `Typer CliRunner` + `MagicMock` | exit code 0 en happy path; exit code != 0 con flag faltante + `--no-interactive` |
+| `SystemRunner` | `subprocess.run` | `unittest.mock.patch` | cmd constructed, sudo prepended, returncode != 0 → `SystemCommandError` |
+| `DistroDetector` | `/etc/os-release` | `tmp_path` + fixture file | Correct DistroFamily for Ubuntu/Fedora/openSUSE/unknown |
+| `AptPackageManager` | `SystemRunner` | `MagicMock(spec=SystemRunner)` | cmd includes `apt-get install -y` + package list |
+| `DnfPackageManager` | `SystemRunner` | `MagicMock(spec=SystemRunner)` | cmd includes `dnf install -y` + package list |
+| `ZypperPackageManager` | `SystemRunner` | `MagicMock(spec=SystemRunner)` | cmd includes `zypper install -y` + package list |
+| `NginxProvider` | `PackageManager`, `SystemRunner` | `MagicMock` | `install()` calls `pkg_manager.install(["nginx", ...])`; `verify()` uses `sudo=True` |
+| `ApacheProvider` | `PackageManager`, `SystemRunner`, `DistroFamily` | `MagicMock` | package name varies by `DistroFamily` (apache2 / httpd); correct template |
+| `TraefikProvider` | `SystemRunner`, `tmp_path` | `MagicMock` + `tmp_path` | generated files exist; `acme.json` with perms 600 |
+| `DNSValidator` | `socket.getaddrinfo` | `unittest.mock.patch("socket.getaddrinfo")` | IP matches → OK; no match → `DNSValidationError` with message |
+| `CertbotManager` | `SystemRunner` | `MagicMock` | `certonly` cmd includes `--nginx`/`--apache`; `certificates` parses fixture |
+| `CertbotInstaller` | `SystemRunner`, `DistroFamily`, `ServerType` | `MagicMock` | snap+symlink for Debian, dnf for Fedora, zypper for SUSE; TRAEFIK skips install; idempotent if already installed |
+| `CertbotService` | all of the above | multiple `MagicMock` + `patch` | correct call sequence; exception propagation |
+| `GenerateWizard` | `questionary` | `mocker.patch("questionary.text.ask")` + `unsafe_ask` | fields with predefined values; validation rejects invalid emails |
+| `LiveOutputRenderer` | `rich.Console` | `rich.Console(file=io.StringIO())` | output contains `[✔]` on completion; `[✗]` on failure |
+| `LocaleManager` | `locales/*.json` files | `tmp_path` with custom JSON | `t("key")` returns correct text; missing key → fallback English |
+| `LanguageSelector` | `questionary`, `config.toml` | `mocker.patch` + `tmp_config` fixture | persists lang in TOML; second call does not show prompt |
+| CLI (Typer) | `CertbotService` | Typer CliRunner + `MagicMock` | exit code 0 on happy path; exit code != 0 with missing flag + `--no-interactive` |
 
-### 8.5 Patrones de Tests de Integración
+### 8.5 Integration Test Patterns
 
-Los tests de integración verifican la colaboración entre dos o más módulos reales, sin red ni sudo. Usan `tmp_path` para I/O de disco.
+Integration tests verify collaboration between two or more real modules, without network or sudo. Use `tmp_path` for disk I/O.
 
-**Patrón: generación de archivo de configuración**
+**Pattern: configuration file generation**
 
 ```python
 def test_nginx_config_gen_creates_valid_file(tmp_path, mock_runner):
@@ -737,7 +778,7 @@ def test_nginx_config_gen_creates_valid_file(tmp_path, mock_runner):
     assert "proxy_pass http://localhost:8000" in content
 ```
 
-**Patrón: parseo de salida de Certbot**
+**Pattern: Certbot output parsing**
 
 ```python
 def test_certbot_manager_parses_certificates_output(mock_runner):
@@ -751,7 +792,7 @@ def test_certbot_manager_parses_certificates_output(mock_runner):
     assert certs[0].days_until_expiry > 0
 ```
 
-**Patrón: flujo completo de `generate` con todos los deps mockeados**
+**Pattern: complete `generate` flow with all deps mocked**
 
 ```python
 def test_certbot_service_generate_full_flow(mock_runner, tmp_path, mocker):
@@ -762,33 +803,33 @@ def test_certbot_service_generate_full_flow(mock_runner, tmp_path, mocker):
     service = CertbotService(runner=mock_runner, config_dir=tmp_path)
     service.generate(config)
 
-    # Verificar secuencia de llamadas
+    # Verify call sequence
     calls = [str(c) for c in mock_runner.run.call_args_list]
     assert any("nginx -t" in c for c in calls)
     assert any("certbot" in c for c in calls)
 ```
 
-### 8.6 Cobertura Mínima por Módulo
+### 8.6 Minimum Coverage per Module
 
-| Módulo | Cobertura mínima | Justificación |
+| Module | Minimum coverage | Justification |
 |---|---|---|
-| `utils/system.py` | 95% | Núcleo de seguridad — sudo granular |
-| `utils/distro.py` | 100% | Lógica de detección crítica, pequeño |
-| `utils/package_manager.py` | 90% | Las 3 implementaciones deben cubrir install, update, is_installed |
-| `utils/dns.py` | 90% | Flujo ok + error + skip deben estar cubiertos |
+| `utils/system.py` | 95% | Security core — granular sudo |
+| `utils/distro.py` | 100% | Critical detection logic, small module |
+| `utils/package_manager.py` | 90% | All 3 implementations must cover install, update, is_installed |
+| `utils/dns.py` | 90% | ok flow + error + skip must be covered |
 | `providers/nginx.py` | 85% | install, configure, verify, remove |
-| `providers/apache.py` | 85% | Los 3 `DistroFamily` en configure |
-| `providers/traefik.py` | 80% | Generación de archivos + chmod |
+| `providers/apache.py` | 85% | All 3 `DistroFamily` in configure |
+| `providers/traefik.py` | 80% | File generation + chmod |
 | `certbot/manager.py` | 85% | certonly, renew, revoke, list, parsing |
-| `certbot/installer.py` | 90% | snap, dnf, zypper branches |
-| `domain/services.py` | 80% | Flujo principal + manejo de excepciones |
-| `interactive/wizard.py` | 80% | Happy path + validación de campos |
-| `interactive/output.py` | 75% | Estados [✔] [→] [✗] |
-| `i18n/locale_manager.py` | 95% | Fallback, interpolación — crítico para UX |
-| `i18n/selector.py` | 85% | prompt, persistencia, --lang override |
-| `cli.py` | 75% | Subcomandos principales via CliRunner |
+| `certbot/installer.py` | 90% | snap+snapd+symlink, dnf, zypper branches; traefik skip; already-installed idempotency |
+| `domain/services.py` | 80% | Main flow + exception handling |
+| `interactive/wizard.py` | 80% | Happy path + field validation |
+| `interactive/output.py` | 75% | States [✔] [→] [✗] |
+| `i18n/locale_manager.py` | 95% | Fallback, interpolation — critical for UX |
+| `i18n/selector.py` | 85% | prompt, persistence, --lang override |
+| `cli.py` | 75% | Main subcommands via CliRunner |
 
-### 8.7 Configuración de pytest y Cobertura
+### 8.7 pytest and Coverage Configuration
 
 ```toml
 # pyproject.toml
@@ -796,9 +837,9 @@ def test_certbot_service_generate_full_flow(mock_runner, tmp_path, mocker):
 testpaths = ["tests"]
 addopts = "--strict-markers -v"
 markers = [
-    "unit: tests unitarios sin I/O real",
-    "integration: tests con I/O de disco (tmp_path)",
-    "e2e: tests que requieren entorno Linux real con sudo",
+    "unit: unit tests without real I/O",
+    "integration: tests with disk I/O (tmp_path)",
+    "e2e: tests requiring real Linux environment with sudo",
 ]
 
 [tool.coverage.run]
@@ -815,43 +856,43 @@ exclude_lines = [
 ]
 ```
 
-**Comandos de uso:**
+**Usage commands:**
 
 ```bash
-# Ejecutar solo tests unitarios (sin I/O real)
+# Run only unit tests (without real I/O)
 pytest -m unit
 
-# Ejecutar tests unitarios + integración
+# Run unit + integration tests
 pytest -m "unit or integration"
 
-# Ver cobertura por módulo
+# View coverage per module
 pytest --cov=src/gen_cerbot --cov-report=term-missing -m "unit or integration"
 
-# Generar reporte HTML de cobertura
+# Generate HTML coverage report
 pytest --cov=src/gen_cerbot --cov-report=html
 
-# Tests E2E (requieren entorno Linux con sudo)
+# E2E tests (require Linux environment with sudo)
 pytest -m e2e --sudo
 ```
 
-### 8.8 Dependencias de Testing
+### 8.8 Testing Dependencies
 
 ```toml
-# pyproject.toml — grupo [project.optional-dependencies]
+# pyproject.toml — [project.optional-dependencies] group
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "pytest-mock>=3.12",      # mocker fixture (alternativa a unittest.mock.patch)
-    "pytest-cov>=5.0",        # cobertura integrada
-    "pytest-asyncio>=0.23",   # por si se usan corutinas en el futuro
-    "rich",                   # ya es dependencia de producción
-    "typer[all]",             # ya es dependencia de producción
+    "pytest-mock>=3.12",      # mocker fixture (alternative to unittest.mock.patch)
+    "pytest-cov>=5.0",        # integrated coverage
+    "pytest-asyncio>=0.23",   # in case coroutines are used in future
+    "rich",                   # already a production dependency
+    "typer[all]",             # already a production dependency
 ]
 ```
 
 ---
 
-## 9. Empaquetado y Distribución
+## 9. Packaging and Distribution
 
 ```toml
 # pyproject.toml
@@ -878,21 +919,22 @@ select = ["E", "F", "I", "UP"]
 
 ---
 
-## 10. Preguntas Abiertas
+## 10. Open Questions
 
-- [ ] ¿Se requiere soporte para Debian en la v1.0 o solo Ubuntu? — Owner: Ernesto, Deadline: antes de Fase 1
-- [ ] ¿Se debe generar configuración de renovación automática como cron o como systemd timer? — Owner: Ernesto, Deadline: antes de Fase 4
-- [ ] ¿El modo Traefik debe generar un `docker-compose.yml` nuevo o solo los archivos de configuración de Traefik, asumiendo que el usuario ya tiene uno? — Owner: Ernesto, Deadline: antes de Fase 3
+- [ ] Is Debian support required for v1.0 or only Ubuntu? — Owner: Ernesto, Deadline: before Phase 1
+- [ ] Should automatic renewal configuration be generated as cron or as systemd timer? — Owner: Ernesto, Deadline: before Phase 4
+- [ ] Should Traefik mode generate a new `docker-compose.yml` or only Traefik configuration files, assuming the user already has one? — Owner: Ernesto, Deadline: before Phase 3
 
 ---
 
-## Historial de Cambios
+## Change History
 
-| Versión | Fecha | Autor | Cambios |
+| Version | Date | Author | Changes |
 |---|---|---|---|
-| 1.0 | 2026-03-31 | Ernesto Crespo | Versión inicial: arquitectura base Nginx/Apache/Traefik, Provider pattern, Certbot, Typer |
-| 1.1 | 2026-03-31 | Ernesto Crespo | Multi-distro: DistroDetector, PackageManager ABC (Apt/Dnf/Zypper), PkgFamily enum, SystemRunner con sudo granular, tabla de mapeo de paquetes por distro, DD-005 PackageManager Strategy, DD-006 sudo granular |
-| 1.2 | 2026-03-31 | Ernesto Crespo | Modo interactivo: módulo interactive/ (menu.py, wizard.py, output.py), componentes InteractiveMenu/GenerateWizard/LiveOutputRenderer, diagrama dual-mode actualizado, DD-007 questionary, DD-008 rich.live, CertificateConfig con campo interactive |
-| 1.3 | 2026-03-31 | Ernesto Crespo | Soporte i18n: módulo i18n/ (locale_manager.py, selector.py, locales/en.json, es.json), LanguageSelector, LocaleManager, DD-009 JSON locales, flag --lang global, campo lang en CertificateConfig, ejemplo de estructura locale JSON, diagrama de entrada actualizado con capa i18n |
-| 1.4 | 2026-03-31 | Ernesto Crespo | Empaquetado nativo: pyproject.toml completo, packaging/debian/, packaging/rpm/gen-cerbot.spec; Sección 9 actualizada con .deb y .rpm |
-| 1.5 | 2026-03-31 | Ernesto Crespo | Especificaciones de testing: Sección 8 reescrita con pirámide de tests, estructura tests/, catálogo de fixtures (os-release, certbot-outputs, templates-rendered), conftest.py con fixtures globales, tabla de mock por módulo, patrones de integración, cobertura mínima por módulo, pyproject.toml con pytest/coverage config y dependencias de dev |
+| 1.0 | 2026-03-31 | Ernesto Crespo | Initial version: base architecture Nginx/Apache/Traefik, Provider pattern, Certbot, Typer |
+| 1.1 | 2026-03-31 | Ernesto Crespo | Multi-distro: DistroDetector, PackageManager ABC (Apt/Dnf/Zypper), PkgFamily enum, SystemRunner with granular sudo, package name mapping table per distro, DD-005 PackageManager Strategy, DD-006 granular sudo |
+| 1.2 | 2026-03-31 | Ernesto Crespo | Interactive mode: interactive/ module (menu.py, wizard.py, output.py), InteractiveMenu/GenerateWizard/LiveOutputRenderer components, updated dual-mode diagram, DD-007 questionary, DD-008 rich.live, CertificateConfig with interactive field |
+| 1.3 | 2026-03-31 | Ernesto Crespo | i18n support: i18n/ module (locale_manager.py, selector.py, locales/en.json, es.json), LanguageSelector, LocaleManager, DD-009 JSON locales, global --lang flag, lang field in CertificateConfig, locale JSON structure example, entry diagram updated with i18n layer |
+| 1.4 | 2026-03-31 | Ernesto Crespo | Native packaging: complete pyproject.toml, packaging/debian/, packaging/rpm/gen-cerbot.spec; Section 9 updated with .deb and .rpm |
+| 1.5 | 2026-03-31 | Ernesto Crespo | Testing specifications: Section 8 rewritten with test pyramid, tests/ structure, fixture catalog (os-release, certbot-outputs, templates-rendered), conftest.py with global fixtures, mocking table per module, integration patterns, minimum coverage per module, pyproject.toml with pytest/coverage config and dev dependencies |
+| 1.6 | 2026-03-31 | Ernesto Crespo | Certbot detail: Section 3.7 (installation matrix, certificate request matrix, post-cert service verification table); CertbotInstaller updated with snapd pre-check and symlink; main flow step i/j refined with per-distro commands and verify_service step; mock strategy and coverage table updated |

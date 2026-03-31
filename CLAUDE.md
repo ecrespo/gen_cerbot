@@ -78,6 +78,10 @@ DistroDetector — reads /etc/os-release → DistroFamily enum
 
 **i18n:** `LocaleManager.t("key")` returns the translated string with fallback to English. Language preference stored in `~/.config/gen_cerbot/config.toml`. Force with `--lang en|es`.
 
+**CertbotInstaller:** Installs Certbot per distro family. On Debian/Ubuntu: checks snapd is present → `snap install --classic certbot` → `ln -sf /snap/bin/certbot /usr/local/bin/certbot`. On Fedora: `dnf install -y certbot python3-certbot-nginx python3-certbot-apache`. On openSUSE: `zypper install -y certbot python3-certbot-nginx python3-certbot-apache`. Traefik does not use Certbot (ACME is native in traefik.yml).
+
+**CertbotManager:** Requests certificates with `sudo certbot --nginx` or `sudo certbot --apache` (never `--traefik`), always passing `--non-interactive --agree-tos --email`. After a successful request, calls `SystemRunner` to run `systemctl status <service> --no-pager` (nginx / apache2 / httpd depending on distro) for final health check.
+
 **CertRegistry:** JSON file tracking managed certificates (`utils/registry.py`). Operations must be idempotent — re-running on an already-configured system must not break anything.
 
 **Templates:** Jinja2 renders server config files (`utils/templates.py`).
@@ -93,8 +97,8 @@ DistroDetector — reads /etc/os-release → DistroFamily enum
 | `domain/services.py` | `CertbotService` — main orchestration logic |
 | `providers/base.py` | `ServerProvider` ABC |
 | `providers/{nginx,apache,traefik}.py` | Web server implementations |
-| `certbot/installer.py` | Certbot installation via snap |
-| `certbot/manager.py` | Certificate lifecycle management |
+| `certbot/installer.py` | Certbot installation: snap+symlink (Debian/Ubuntu), dnf (Fedora), zypper (openSUSE); snapd pre-check |
+| `certbot/manager.py` | Certificate lifecycle management: `request()` runs `certbot --nginx/--apache --non-interactive --agree-tos`; `verify_service()` runs `systemctl status` post-cert |
 | `interactive/menu.py` | Main interactive menu (questionary) |
 | `interactive/wizard.py` | Step-by-step generate wizard |
 | `interactive/output.py` | Real-time output display (rich) |
