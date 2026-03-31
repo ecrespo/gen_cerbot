@@ -208,3 +208,5 @@ __marimo__/
 .env
 .env.*
 .idea/
+gen_cerbot_presentation.pdf
+gen_cerbot_presentation.pptx
