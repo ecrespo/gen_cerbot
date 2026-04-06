@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gen-cerbot"
+version = "1.0.0"
+description = "CLI tool that automates TLS/SSL certificate configuration for web servers using Let's Encrypt/Certbot"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Ernesto Crespo", email = "ecrespo@gmail.com"},
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Typing :: Typed",
+]
+dependencies = [
+    "typer>=0.9.0,<1.0",
+    "questionary>=2.0,<3.0",
+    "rich>=13.0,<14.0",
+    "pydantic-settings>=2.0,<3.0",
+    "jinja2>=3.1,<4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0,<9.0",
+    "pytest-cov>=4.0,<6.0",
+    "ruff>=0.4.0",
+    "mypy>=1.8,<2.0",
+    "build>=1.0",
+    "twine>=5.0",
+]
+
+[project.scripts]
+gen-cerbot = "gen_cerbot.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/ecrespo/gen-cerbot"
+Repository = "https://github.com/ecrespo/gen-cerbot"
+Issues = "https://github.com/ecrespo/gen-cerbot/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+packages = ["gen_cerbot"]
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["gen_cerbot"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80

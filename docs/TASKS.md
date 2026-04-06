@@ -53,32 +53,32 @@ The implementation of `gen_cerbot` is divided into **8 phases** (Phase 6 is 2 we
 
 | ID | Task | Estimate | Dependency | Status |
 |---|---|---|---|---|
-| F1-01 | Create project directory structure | 2h | — | ☐ |
-| F1-02 | Configure `pyproject.toml` with dependencies and entry point | 1h | F1-01 | ☐ |
-| F1-03 | Configure ruff, mypy, and pre-commit hooks | 1h | F1-02 | ☐ |
-| F1-04 | Implement `core/exceptions.py` with complete hierarchy (incl. `UnsupportedDistroError`, `SudoError`) | 1h | F1-01 | ☐ |
-| F1-05 | Implement `core/config.py` with pydantic-settings | 2h | F1-01 | ☐ |
-| F1-06 | Implement `domain/models.py` (CertificateConfig, ServerType, DistroFamily, CertificateRecord) | 2h | F1-04 | ☐ |
-| F1-07 | Implement `utils/system.py` (SystemRunner with `run(cmd, sudo=False)` — prepends `["sudo"]` when `sudo=True`) | 3h | F1-04 | ☐ |
-| F1-08 | Implement `utils/distro.py` (DistroDetector: reads `/etc/os-release` → `DistroFamily`) | 2h | F1-06 | ☐ |
-| F1-09 | Implement `utils/package_manager.py` (PackageManager ABC + AptPackageManager + DnfPackageManager + ZypperPackageManager + Factory) | 4h | F1-07, F1-08 | ☐ |
-| F1-10 | Implement `utils/registry.py` (CertRegistry JSON) | 2h | F1-06 | ☐ |
-| F1-11 | Implement `utils/templates.py` (Jinja2 renderer) | 2h | F1-01 | ☐ |
-| F1-12 | Create skeleton CLI with Typer: subcommands `generate`, `list`, `renew`, `remove` (stubs) | 3h | F1-06 | ☐ |
-| F1-13 | Configure pytest with base fixtures and test structure | 2h | F1-07 | ☐ |
-| F1-14 | Unit tests: SystemRunner (verify prepending sudo), DistroDetector (mock /etc/os-release), PackageManager (3 implementations) | 4h | F1-07, F1-08, F1-09 | ☐ |
-| F1-15 | Unit tests: CertRegistry, TemplateRenderer | 2h | F1-10, F1-11 | ☐ |
+| F1-01 | Create project directory structure | 2h | — | ✅ Done |
+| F1-02 | Configure `pyproject.toml` with dependencies and entry point | 1h | F1-01 | ✅ Done |
+| F1-03 | Configure ruff, mypy, and pre-commit hooks | 1h | F1-02 | ✅ Done |
+| F1-04 | Implement `core/exceptions.py` with complete hierarchy (incl. `UnsupportedDistroError`, `SudoError`) | 1h | F1-01 | ✅ Done |
+| F1-05 | Implement `core/config.py` with pydantic-settings | 2h | F1-01 | ✅ Done |
+| F1-06 | Implement `domain/models.py` (CertificateConfig, ServerType, DistroFamily, CertificateRecord) | 2h | F1-04 | ✅ Done |
+| F1-07 | Implement `utils/system.py` (SystemRunner with `run(cmd, sudo=False)` — prepends `["sudo"]` when `sudo=True`) | 3h | F1-04 | ✅ Done |
+| F1-08 | Implement `utils/distro.py` (DistroDetector: reads `/etc/os-release` → `DistroFamily`) | 2h | F1-06 | ✅ Done |
+| F1-09 | Implement `utils/package_manager.py` (PackageManager ABC + AptPackageManager + DnfPackageManager + ZypperPackageManager + Factory) | 4h | F1-07, F1-08 | ✅ Done |
+| F1-10 | Implement `utils/registry.py` (CertRegistry JSON) | 2h | F1-06 | ✅ Done |
+| F1-11 | Implement `utils/templates.py` (Jinja2 renderer) | 2h | F1-01 | ✅ Done |
+| F1-12 | Create skeleton CLI with Typer: subcommands `generate`, `list`, `renew`, `remove` (stubs) | 3h | F1-06 | ✅ Done |
+| F1-13 | Configure pytest with base fixtures and test structure | 2h | F1-07 | ✅ Done |
+| F1-14 | Unit tests: SystemRunner (verify prepending sudo), DistroDetector (mock /etc/os-release), PackageManager (3 implementations) | 4h | F1-07, F1-08, F1-09 | ✅ Done |
+| F1-15 | Unit tests: CertRegistry, TemplateRenderer | 2h | F1-10, F1-11 | ✅ Done |
 
 #### Done Criteria
 
-- [ ] `gen-cerbot --help` works and displays all subcommands
-- [ ] `gen-cerbot generate --help` shows all documented flags
-- [ ] `DistroDetector` correctly detects Ubuntu, Fedora, and openSUSE with `/etc/os-release` fixtures
-- [ ] `PackageManager` generates correct command with `sudo` for each distro
-- [ ] `SystemRunner.run(cmd, sudo=True)` prepends `["sudo"]` verified in tests
-- [ ] Utils unit tests pass with `pytest`
-- [ ] `ruff check .` and `mypy .` with no errors
-- [ ] `pyproject.toml` installable with `pip install -e .`
+- [x] `gen-cerbot --help` works and displays all subcommands
+- [x] `gen-cerbot generate --help` shows all documented flags
+- [x] `DistroDetector` correctly detects Ubuntu, Fedora, and openSUSE with `/etc/os-release` fixtures
+- [x] `PackageManager` generates correct command with `sudo` for each distro
+- [x] `SystemRunner.run(cmd, sudo=True)` prepends `["sudo"]` verified in tests
+- [x] Utils unit tests pass with `pytest`
+- [x] `ruff check .` and `mypy .` with no errors
+- [x] `pyproject.toml` installable with `pip install -e .`
 
 ---
 
@@ -91,25 +91,25 @@ The implementation of `gen_cerbot` is divided into **8 phases** (Phase 6 is 2 we
 
 | ID | Task | Estimate | Dependency | Status |
 |---|---|---|---|---|
-| F2-01 | Implement `providers/base.py` (ServerProvider ABC — receives `PackageManager` in constructor) | 2h | F1-06 | ☐ |
-| F2-02 | Create Jinja2 template `templates/nginx/site.conf.j2` | 2h | F1-11 | ☐ |
-| F2-03 | Implement `providers/nginx.py`: `install()` method using `pkg_manager.install(["nginx"])` with sudo | 2h | F2-01, F1-09 | ☐ |
-| F2-04 | Implement `providers/nginx.py`: `configure()` method — generates config and enables site (symlink on Debian, include on Fedora/SUSE) | 3h | F2-02, F2-03 | ☐ |
-| F2-05 | Implement `providers/nginx.py`: `verify()` method — `runner.run(["nginx", "-t"], sudo=True)` | 1h | F2-04 | ☐ |
-| F2-06 | Implement `providers/nginx.py`: `remove()` method | 2h | F2-04 | ☐ |
-| F2-07 | Implement `providers/factory.py` (ProviderFactory.get(server_type, pkg_manager)) | 1h | F2-01 | ☐ |
-| F2-08 | Unit tests: NginxProvider with PackageManager and SystemRunner mocked (verify sudo calls) | 4h | F2-06 | ☐ |
-| F2-09 | Integration test: config file generation with tmp_path | 2h | F2-04 | ☐ |
-| F2-10 | Validate generated Nginx template is syntactically correct | 1h | F2-02 | ☐ |
+| F2-01 | Implement `providers/base.py` (ServerProvider ABC — receives `PackageManager` in constructor) | 2h | F1-06 | ✅ Done |
+| F2-02 | Create Jinja2 template `templates/nginx/site.conf.j2` | 2h | F1-11 | ✅ Done |
+| F2-03 | Implement `providers/nginx.py`: `install()` method using `pkg_manager.install(["nginx"])` with sudo | 2h | F2-01, F1-09 | ✅ Done |
+| F2-04 | Implement `providers/nginx.py`: `configure()` method — generates config and enables site (symlink on Debian, include on Fedora/SUSE) | 3h | F2-02, F2-03 | ✅ Done |
+| F2-05 | Implement `providers/nginx.py`: `verify()` method — `runner.run(["nginx", "-t"], sudo=True)` | 1h | F2-04 | ✅ Done |
+| F2-06 | Implement `providers/nginx.py`: `remove()` method | 2h | F2-04 | ✅ Done |
+| F2-07 | Implement `providers/factory.py` (ProviderFactory.get(server_type, pkg_manager)) | 1h | F2-01 | ✅ Done |
+| F2-08 | Unit tests: NginxProvider with PackageManager and SystemRunner mocked (verify sudo calls) | 4h | F2-06 | ✅ Done |
+| F2-09 | Integration test: config file generation with tmp_path | 2h | F2-04 | ✅ Done |
+| F2-10 | Validate generated Nginx template is syntactically correct | 1h | F2-02 | ✅ Done |
 
 #### Done Criteria
 
-- [ ] `NginxProvider` implements all methods from `ServerProvider`
-- [ ] `NginxProvider` receives `PackageManager` via injection (does not instantiate directly)
-- [ ] Nginx template generates valid config (with reverse proxy, headers, and timeouts from original script)
-- [ ] `NginxProvider` tests pass with mocked PackageManager and SystemRunner
-- [ ] Tests verify that `install()` calls `pkg_manager.install()` and `verify()` uses `sudo=True`
-- [ ] Test coverage in `providers/nginx.py` > 80%
+- [x] `NginxProvider` implements all methods from `ServerProvider`
+- [x] `NginxProvider` receives `PackageManager` via injection (does not instantiate directly)
+- [x] Nginx template generates valid config (with reverse proxy, headers, and timeouts from original script)
+- [x] `NginxProvider` tests pass with mocked PackageManager and SystemRunner
+- [x] Tests verify that `install()` calls `pkg_manager.install()` and `verify()` uses `sudo=True`
+- [x] Test coverage in `providers/nginx.py` > 80%
 
 ---
 
