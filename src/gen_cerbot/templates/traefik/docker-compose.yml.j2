@@ -1,0 +1,27 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: {{ project_name }}_traefik
+    restart: unless-stopped
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./acme.json:/acme.json
+    networks:
+      - {{ project_name }}_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{{ project_name }}.rule=Host(`{{ domain }}`)"
+      - "traefik.http.routers.{{ project_name }}.entrypoints=websecure"
+      - "traefik.http.routers.{{ project_name }}.tls=true"
+      - "traefik.http.routers.{{ project_name }}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.{{ project_name }}.loadbalancer.server.port={{ port }}"
+
+networks:
+  {{ project_name }}_network:
+    driver: bridge

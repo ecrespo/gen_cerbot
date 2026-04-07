@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from gen_cerbot.domain.models import DistroFamily, ServerType
+from gen_cerbot.providers.apache import ApacheProvider
 from gen_cerbot.providers.base import ServerProvider
 from gen_cerbot.providers.nginx import NginxProvider
+from gen_cerbot.providers.traefik import TraefikProvider
 from gen_cerbot.utils.package_manager import PackageManagerFactory
 from gen_cerbot.utils.system import SystemRunner
 from gen_cerbot.utils.templates import TemplateRenderer
@@ -27,6 +29,16 @@ class ProviderFactory:
 
         if server_type == ServerType.NGINX:
             return NginxProvider(
+                self._runner, pkg_manager, self._template_renderer, distro_family
+            )
+
+        if server_type == ServerType.APACHE:
+            return ApacheProvider(
+                self._runner, pkg_manager, self._template_renderer, distro_family
+            )
+
+        if server_type == ServerType.TRAEFIK:
+            return TraefikProvider(
                 self._runner, pkg_manager, self._template_renderer, distro_family
             )
 
