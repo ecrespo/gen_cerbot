@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from gen_cerbot.domain.models import DistroFamily, ServerType
+from gen_cerbot.providers.apache import ApacheProvider
 from gen_cerbot.providers.factory import ProviderFactory
 from gen_cerbot.providers.nginx import NginxProvider
+from gen_cerbot.providers.traefik import TraefikProvider
 from gen_cerbot.utils.templates import TemplateRenderer
 from tests.conftest import MockSystemRunner
 
@@ -30,6 +32,33 @@ class TestProviderFactory:
         for distro in DistroFamily:
             provider = factory.get(ServerType.NGINX, distro)
             assert isinstance(provider, NginxProvider)
+
+    def test_get_apache_returns_apache_provider(
+        self, factory: ProviderFactory
+    ) -> None:
+        provider = factory.get(ServerType.APACHE, DistroFamily.DEBIAN)
+        assert isinstance(provider, ApacheProvider)
+
+    def test_get_apache_for_each_distro(
+        self, factory: ProviderFactory
+    ) -> None:
+        for distro in DistroFamily:
+            provider = factory.get(ServerType.APACHE, distro)
+            assert isinstance(provider, ApacheProvider)
+            assert provider._distro_family == distro
+
+    def test_get_traefik_returns_traefik_provider(
+        self, factory: ProviderFactory
+    ) -> None:
+        provider = factory.get(ServerType.TRAEFIK, DistroFamily.DEBIAN)
+        assert isinstance(provider, TraefikProvider)
+
+    def test_get_traefik_for_each_distro(
+        self, factory: ProviderFactory
+    ) -> None:
+        for distro in DistroFamily:
+            provider = factory.get(ServerType.TRAEFIK, distro)
+            assert isinstance(provider, TraefikProvider)
 
     def test_unsupported_server_type_raises(
         self, factory: ProviderFactory

@@ -1,0 +1,22 @@
+<VirtualHost *:80>
+    ServerName {{ domain }}
+    ServerAdmin webmaster@{{ domain }}
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    ProxyPass / http://localhost:{{ port }}/
+    ProxyPassReverse / http://localhost:{{ port }}/
+
+    RequestHeader set X-Forwarded-Proto "http"
+    RequestHeader set X-Forwarded-Port "80"
+
+    # Security headers
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    ErrorLog ${APACHE_LOG_DIR}/{{ project_name }}_error.log
+    CustomLog ${APACHE_LOG_DIR}/{{ project_name }}_access.log combined
+</VirtualHost>

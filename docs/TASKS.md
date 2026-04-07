@@ -113,37 +113,38 @@ The implementation of `gen_cerbot` is divided into **8 phases** (Phase 6 is 2 we
 
 ---
 
-### Phase 3: Apache and Traefik Providers
+### Phase 3: Apache and Traefik Providers ✅
 
 **Duration:** 1 week
 **Goal:** Implement Apache and Traefik Providers.
+**Status:** ✅ Done
 
 #### Tasks
 
 | ID | Task | Estimate | Dependency | Status |
 |---|---|---|---|---|
-| F3-01 | Create Apache Jinja2 templates: `vhost-debian.conf.j2`, `vhost-redhat.conf.j2`, `vhost-suse.conf.j2` | 3h | F1-11 | ☐ |
-| F3-02 | Implement `providers/apache.py`: `install()` method — per-distro packages via `pkg_manager`, `sudo a2enmod` on Debian or modules via conf on Fedora/SUSE | 3h | F2-01, F1-09 | ☐ |
-| F3-03 | Implement `providers/apache.py`: `configure()` method — selects template per distro + `verify()` (`sudo apachectl -t`) | 3h | F3-01, F3-02 | ☐ |
-| F3-04 | Implement `providers/apache.py`: `remove()` method (`sudo a2dissite` on Debian; `rm` config on Fedora/SUSE) | 2h | F3-03 | ☐ |
-| F3-05 | Unit tests: ApacheProvider with mocked PackageManager and SystemRunner — verify correct behavior for each `DistroFamily` | 4h | F3-04 | ☐ |
-| F3-06 | Create Jinja2 templates for Traefik: `docker-compose.yml.j2` and `traefik.yml.j2` | 3h | F1-11 | ☐ |
-| F3-07 | Implement `providers/traefik.py`: `install()` method (checks Docker — distro-agnostic) | 1h | F2-01, F1-07 | ☐ |
-| F3-08 | Implement `providers/traefik.py`: `configure()` method (generates files + `acme.json` with `chmod 600`) | 3h | F3-06, F3-07 | ☐ |
-| F3-09 | Implement `providers/traefik.py`: `verify()` method (`docker compose config` without sudo) | 1h | F3-08 | ☐ |
-| F3-10 | Implement `providers/traefik.py`: `remove()` method | 1h | F3-08 | ☐ |
-| F3-11 | Unit tests: TraefikProvider with mocked SystemRunner | 3h | F3-10 | ☐ |
-| F3-12 | Register Apache and Traefik in ProviderFactory (with pkg_manager) | 1h | F3-04, F3-10, F2-07 | ☐ |
+| F3-01 | Create Apache Jinja2 templates: `vhost-debian.conf.j2`, `vhost-redhat.conf.j2`, `vhost-suse.conf.j2` | 3h | F1-11 | ✅ |
+| F3-02 | Implement `providers/apache.py`: `install()` method — per-distro packages via `pkg_manager`, `sudo a2enmod` on Debian or modules via conf on Fedora/SUSE | 3h | F2-01, F1-09 | ✅ |
+| F3-03 | Implement `providers/apache.py`: `configure()` method — selects template per distro + `verify()` (`sudo apachectl -t`) | 3h | F3-01, F3-02 | ✅ |
+| F3-04 | Implement `providers/apache.py`: `remove()` method (`sudo a2dissite` on Debian; `rm` config on Fedora/SUSE) | 2h | F3-03 | ✅ |
+| F3-05 | Unit tests: ApacheProvider with mocked PackageManager and SystemRunner — verify correct behavior for each `DistroFamily` | 4h | F3-04 | ✅ |
+| F3-06 | Create Jinja2 templates for Traefik: `docker-compose.yml.j2` and `traefik.yml.j2` | 3h | F1-11 | ✅ |
+| F3-07 | Implement `providers/traefik.py`: `install()` method (checks Docker — distro-agnostic) | 1h | F2-01, F1-07 | ✅ |
+| F3-08 | Implement `providers/traefik.py`: `configure()` method (generates files + `acme.json` with `chmod 600`) | 3h | F3-06, F3-07 | ✅ |
+| F3-09 | Implement `providers/traefik.py`: `verify()` method (`docker compose config` without sudo) | 1h | F3-08 | ✅ |
+| F3-10 | Implement `providers/traefik.py`: `remove()` method | 1h | F3-08 | ✅ |
+| F3-11 | Unit tests: TraefikProvider with mocked SystemRunner | 3h | F3-10 | ✅ |
+| F3-12 | Register Apache and Traefik in ProviderFactory (with pkg_manager) | 1h | F3-04, F3-10, F2-07 | ✅ |
 
 #### Done Criteria
 
-- [ ] All three providers are registered in `ProviderFactory`
-- [ ] `ApacheProvider` selects correct template per `DistroFamily`
-- [ ] `ApacheProvider` tests cover 3 `DistroFamily` with mocked PackageManager
-- [ ] `TraefikProvider` tests pass with mocked SystemRunner
-- [ ] Generated Traefik template is valid YAML
-- [ ] All 3 Apache templates generate valid config for their distro
-- [ ] `acme.json` created with 600 permissions in `TraefikProvider`
+- [x] All three providers are registered in `ProviderFactory`
+- [x] `ApacheProvider` selects correct template per `DistroFamily`
+- [x] `ApacheProvider` tests cover 3 `DistroFamily` with mocked PackageManager
+- [x] `TraefikProvider` tests pass with mocked SystemRunner
+- [x] Generated Traefik template is valid YAML
+- [x] All 3 Apache templates generate valid config for their distro
+- [x] `acme.json` created with 600 permissions in `TraefikProvider`
 
 ---
 
