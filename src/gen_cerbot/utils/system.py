@@ -27,6 +27,15 @@ class SystemRunner:
     def __init__(self, dry_run: bool = False) -> None:
         self._dry_run = dry_run
 
+    @property
+    def dry_run(self) -> bool:
+        """Whether the runner is in dry-run mode (no commands executed)."""
+        return self._dry_run
+
+    @dry_run.setter
+    def dry_run(self, value: bool) -> None:
+        self._dry_run = value
+
     def run(
         self,
         cmd: list[str],

@@ -157,22 +157,22 @@ The implementation of `gen_cerbot` is divided into **8 phases** (Phase 6 is 2 we
 
 | ID | Task | Estimate | Dependency | Status |
 |---|---|---|---|---|
-| F4-01 | Implement `utils/dns.py`: DNS resolution and comparison against local IPs | 3h | F1-07 | ☐ |
-| F4-02 | Unit tests: DNSValidator with mocked socket.getaddrinfo | 2h | F4-01 | ☐ |
-| F4-03 | Implement `certbot/installer.py`: `ensure_installed(distro_family, server_type)` — check if certbot is already installed via `certbot --version`; if yes, skip (idempotent) | 1h | F1-07, F1-08 | ☐ |
-| F4-03a | Implement Debian/Ubuntu branch in `CertbotInstaller`: (1) check if snapd is installed via `dpkg -l snapd`; (2) if missing, `sudo apt install -y snapd`; (3) `sudo snap install --classic certbot`; (4) `sudo ln -sf /snap/bin/certbot /usr/local/bin/certbot` | 3h | F4-03 | ☐ |
-| F4-03b | Implement Fedora branch in `CertbotInstaller`: `sudo dnf install -y certbot python3-certbot-nginx python3-certbot-apache` | 1h | F4-03 | ☐ |
-| F4-03c | Implement openSUSE branch in `CertbotInstaller`: `sudo zypper install -y certbot python3-certbot-nginx python3-certbot-apache` | 1h | F4-03 | ☐ |
-| F4-03d | Implement Traefik exception in `CertbotInstaller`: if `server_type == TRAEFIK`, skip all installation steps and return immediately | 0.5h | F4-03 | ☐ |
-| F4-04 | Implement `certbot/manager.py`: method `request(domain, email, server_type, staging)` — build command per server: `--nginx` for Nginx, `--apache` for Apache; always add `--non-interactive --agree-tos --email email`; append `--staging` if `staging=True`; raise `CertbotError` on non-zero exit code | 3h | F4-03, F1-07 | ☐ |
-| F4-04a | Implement `certbot/manager.py`: method `verify_service(server_type, distro_family)` — run `sudo systemctl status nginx --no-pager` for Nginx; `sudo systemctl status apache2 --no-pager` for Apache on Debian; `sudo systemctl status httpd --no-pager` for Apache on Fedora/openSUSE; `docker compose ps` for Traefik; raise `ServerConfigError` if service not active | 2h | F4-04 | ☐ |
-| F4-05 | Implement `certbot/manager.py`: `renew()` and `renew_all()` methods | 2h | F4-04 | ☐ |
-| F4-06 | Implement `certbot/manager.py`: `revoke()` and `delete()` methods | 2h | F4-04 | ☐ |
-| F4-07 | Implement `certbot/manager.py`: `get_certificates()` method (parsing certbot certificates) | 3h | F4-04 | ☐ |
-| F4-08 | Unit tests: CertbotManager with Certbot output fixtures (staging/prod) | 4h | F4-07 | ☐ |
-| F4-09 | Implement `domain/services.py`: `CertbotService.generate()` — includes distro detection step + PackageManager construction before creating Provider | 5h | F4-04, F4-01, F2-07 | ☐ |
-| F4-10 | Implement `--dry-run` support in CertbotService and all Providers | 2h | F4-09 | ☐ |
-| F4-11 | Implement `--staging` support in CertbotManager | 1h | F4-04 | ☐ |
+| F4-01 | Implement `utils/dns.py`: DNS resolution and comparison against local IPs | 3h | F1-07 | ☑ Done |
+| F4-02 | Unit tests: DNSValidator with mocked socket.getaddrinfo | 2h | F4-01 | ☑ Done |
+| F4-03 | Implement `certbot/installer.py`: `ensure_installed(distro_family, server_type)` — check if certbot is already installed via `certbot --version`; if yes, skip (idempotent) | 1h | F1-07, F1-08 | ☑ Done |
+| F4-03a | Implement Debian/Ubuntu branch in `CertbotInstaller`: (1) check if snapd is installed via `dpkg -l snapd`; (2) if missing, `sudo apt install -y snapd`; (3) `sudo snap install --classic certbot`; (4) `sudo ln -sf /snap/bin/certbot /usr/local/bin/certbot` | 3h | F4-03 | ☑ Done |
+| F4-03b | Implement Fedora branch in `CertbotInstaller`: `sudo dnf install -y certbot python3-certbot-nginx python3-certbot-apache` | 1h | F4-03 | ☑ Done |
+| F4-03c | Implement openSUSE branch in `CertbotInstaller`: `sudo zypper install -y certbot python3-certbot-nginx python3-certbot-apache` | 1h | F4-03 | ☑ Done |
+| F4-03d | Implement Traefik exception in `CertbotInstaller`: if `server_type == TRAEFIK`, skip all installation steps and return immediately | 0.5h | F4-03 | ☑ Done |
+| F4-04 | Implement `certbot/manager.py`: method `request(domain, email, server_type, staging)` — build command per server: `--nginx` for Nginx, `--apache` for Apache; always add `--non-interactive --agree-tos --email email`; append `--staging` if `staging=True`; raise `CertbotError` on non-zero exit code | 3h | F4-03, F1-07 | ☑ Done |
+| F4-04a | Implement `certbot/manager.py`: method `verify_service(server_type, distro_family)` — run `sudo systemctl status nginx --no-pager` for Nginx; `sudo systemctl status apache2 --no-pager` for Apache on Debian; `sudo systemctl status httpd --no-pager` for Apache on Fedora/openSUSE; `docker compose ps` for Traefik; raise `ServerConfigError` if service not active | 2h | F4-04 | ☑ Done |
+| F4-05 | Implement `certbot/manager.py`: `renew()` and `renew_all()` methods | 2h | F4-04 | ☑ Done |
+| F4-06 | Implement `certbot/manager.py`: `revoke()` and `delete()` methods | 2h | F4-04 | ☑ Done |
+| F4-07 | Implement `certbot/manager.py`: `get_certificates()` method (parsing certbot certificates) | 3h | F4-04 | ☑ Done |
+| F4-08 | Unit tests: CertbotManager with Certbot output fixtures (staging/prod) | 4h | F4-07 | ☑ Done |
+| F4-09 | Implement `domain/services.py`: `CertbotService.generate()` — includes distro detection step + PackageManager construction before creating Provider | 5h | F4-04, F4-01, F2-07 | ☑ Done |
+| F4-10 | Implement `--dry-run` support in CertbotService and all Providers | 2h | F4-09 | ☑ Done |
+| F4-11 | Implement `--staging` support in CertbotManager | 1h | F4-04 | ☑ Done |
 
 #### Done Criteria
 

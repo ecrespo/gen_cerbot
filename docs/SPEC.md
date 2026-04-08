@@ -234,16 +234,18 @@ Packaging this operational knowledge into a reusable, tested, multi-server Pytho
   6. CLI updates the local registry
 - **Priority:** `SHOULD`
 
-### RF-007: Dry-run mode
+### RF-007: Dry-run mode ✅
 
 - **Description:** Any subcommand must be able to execute with `--dry-run` to show what it would do without applying actual changes.
 - **Actor:** User (CLI)
 - **Priority:** `SHOULD`
+- **Status:** ✅ **Done** — Phase 4 (F4-10). Implemented by flipping `SystemRunner.dry_run` on the shared runner inside `CertbotService.generate()` (try/finally restore); all providers, the installer, and the manager respect it transparently. `CertbotInstaller.is_installed()` and `_snapd_installed()` short-circuit to `False` under dry-run so install commands are still surfaced.
 
-### RF-008: Pre-flight DNS validation
+### RF-008: Pre-flight DNS validation ✅
 
 - **Description:** Before requesting a certificate, the CLI must verify that the domain resolves to one of the server's IPs.
 - **Priority:** `MUST`
+- **Status:** ✅ **Done** — Phase 4 (F4-01, F4-02). `DNSValidator` (`utils/dns.py`) resolves via `socket.getaddrinfo`, compares against auto-discovered local IPs (loopback excluded), supports `skip_dns_check` bypass, and raises `DNSValidationError` with expected IP on mismatch. Covered by 7 unit tests (TC-014/015/016).
 
 ### RF-009: Automatic detection of package manager and use of sudo
 
@@ -350,11 +352,12 @@ Packaging this operational knowledge into a reusable, tested, multi-server Pytho
 - **Postconditions:** `pytest -m "unit or integration"` passes with coverage > 80% in CI environment without network or privileges.
 - **Priority:** `MUST`
 
-### RF-014: Certbot installation and execution by distro and web server
+### RF-014: Certbot installation and execution by distro and web server ✅
 
 - **Description:** The tool must install Certbot using the native method for each Linux distribution family, create the required post-install symlink on Debian/Ubuntu, execute the certificate request with `--non-interactive` mode (no interactive prompts), and verify the web server service is running correctly after the certificate is obtained.
 - **Actor:** CertbotInstaller / CertbotManager (internal)
 - **Preconditions:** The user can execute `sudo`; internet access is available; port 80 is free.
+- **Status:** ✅ **Done** — Phase 4. `CertbotInstaller` (F4-03/03a/03b/03c/03d) handles the three distro branches plus the Traefik skip; `CertbotManager` (F4-04/04a/05/06/07) implements `request`, `verify_service`, `renew`, `renew_all`, `revoke`, `delete`, and `get_certificates`; `CertbotService.generate()` (F4-09) wires DNS → provider → installer → manager with `--dry-run` (F4-10) and `--staging` (F4-11) propagation. Covered by 28 unit tests in `test_certbot_manager.py` + 8 orchestration tests in `test_certbot_service.py`.
 
 #### Certbot installation matrix by distro
 
@@ -609,7 +612,7 @@ After a successful certificate request, `CertbotManager` runs a service health c
 | Phase 1: Foundation | 1 week | Project structure, CLI skeleton, tests |
 | Phase 2: Nginx Provider | 1 week | Complete and tested Nginx provider |
 | Phase 3: Apache + Traefik Providers ✅ | 1 week | Apache and Traefik providers (**Done**) |
-| Phase 4: Certbot Manager | 1 week | Complete Certbot integration |
+| Phase 4: Certbot Manager ✅ | 1 week | Complete Certbot integration (**Done**) |
 | Phase 5: Operations (list/renew/remove) | 1 week | All subcommands |
 | Phase 6: Testing, Hardening & Packaging | 2 weeks | Coverage > 80%, docs; PyPI wheel + .deb + .rpm packages |
 | Phase 7: Interactive Mode | 1 week | Main menu + generate wizard + real-time output |
@@ -628,6 +631,7 @@ After a successful certificate request, `CertbotManager` runs a service health c
 | 1.4 | 2026-03-31 | Ernesto Crespo | Native packaging: RF-012 distribution PyPI/.deb/.rpm; Epic 5 with US-012..US-014; build dependencies in table; extended portability RNF; Phase 6 extended to 2 weeks; 3 new packaging risks |
 | 1.5 | 2026-03-31 | Ernesto Crespo | Testing specifications: RF-013 unit and integration test suite with per-module requirements (DistroDetector fixtures, PackageManager 3 impls, ApacheProvider 3 DistroFamily, GenerateWizard unsafe_ask, LocaleManager fallback, 6 integration scenarios, complete CertbotService flow); updated Quality RNF with per-module coverage minimums |
 | 1.6 | 2026-03-31 | Ernesto Crespo | RF-014: Certbot installation and execution by distro/server; snapd pre-check + symlink (Debian/Ubuntu); dnf/zypper on Fedora/openSUSE; --non-interactive --agree-tos execution; post-cert systemctl status verification; Traefik ACME-native exception documented; RF-001/RF-002/RF-009 enhanced with detailed certbot steps |
+| 1.7 | 2026-04-08 | Ernesto Crespo | Phase 4 complete: RF-007 (dry-run), RF-008 (DNS pre-flight validation), and RF-014 (Certbot install + request + verify) marked ✅ Done. Delivered `utils/dns.py` (DNSValidator), `certbot/installer.py` (ensure_installed with Debian/Fedora/SUSE branches + Traefik skip), `certbot/manager.py` (request, verify_service, renew, renew_all, revoke, delete, get_certificates), and `domain/services.py` (CertbotService.generate orchestration). 160 unit tests passing, ruff + mypy --strict clean. |
 
 ## Approvals
 

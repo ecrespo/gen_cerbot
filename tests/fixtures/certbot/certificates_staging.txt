@@ -1,0 +1,10 @@
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+
+Found the following certs:
+  Certificate Name: staging.example.com
+    Serial Number: fa000000dead
+    Key Type: RSA
+    Domains: staging.example.com
+    Expiry Date: 2026-05-01 09:30:45+00:00 (VALID: 30 days) (TEST_CERT)
+    Certificate Path: /etc/letsencrypt/live/staging.example.com/fullchain.pem
+    Private Key Path: /etc/letsencrypt/live/staging.example.com/privkey.pem
